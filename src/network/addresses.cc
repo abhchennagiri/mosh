@@ -30,11 +30,14 @@
     also delete it here.
 */
 
+#include <ifaddrs.h>
+#include <arpa/inet.h>
+
 #include "addresses.h"
 #include "timestamp.h"
 
 extern "C" {
-#include "addr_lib/get_ip_addresses.h"
+#include "addr_lib/util.h"
 }
 
 using namespace Network;
@@ -43,20 +46,34 @@ const unsigned char Addr::v4prefix[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF
 
 std::vector< Addr > Addresses::get_host_addresses( int *has_change )
 {
-  array_t kaddrs = get_kernel_addresses();
-  array_iter_t iter;
-  struct kernel_address *kaddr = NULL;
+  struct ifaddrs *ifaddr;
+  struct ifaddrs *ifa;
   std::set< Addr > addr;
   int changed = 0;
+  int rc;
 
-  init_iterator( &iter );
-  while ( NULL != (kaddr = (struct kernel_address *)get_next( kaddrs, &iter )) ) {
-    Addr tmp = Addr( kaddr->sa );
+  rc = getifaddrs( &ifaddr );
+  if ( rc < 0 ) {
+    addr = addresses;
+    goto done;
+  }
+
+  for ( ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next ) {
+    if ( !ifa->ifa_addr ) continue;
+    Addr tmp;
+    switch ( ifa->ifa_addr->sa_family ) {
+    case AF_INET: tmp = Addr( *(struct sockaddr_in*) ifa->ifa_addr ); break;
+    case AF_INET6: tmp = Addr( *(struct sockaddr_in6*) ifa->ifa_addr ); break;
+    default: continue;
+    }
     log_dbg( LOG_DEBUG_COMMON, "Host address read: %s.\n", tmp.tostring().c_str() );
     addr.insert( tmp );
   }
-  free_array( &kaddrs, free );
+
+  freeifaddrs( ifaddr );
+
   changed = !( addr == addresses );
+ done:
   if ( has_change ) {
       *has_change = changed;
   }
