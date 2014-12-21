@@ -49,6 +49,10 @@ directly.
 With the \-c option, \fBmosh-client\fP instead prints the number of colors
 of the terminal given by the TERM environment variable.
 
+With the \-w option, \fBmosh-client\fP prints its PID at launch and
+waits until the user press ENTER.  This allow the user to easily
+attach a gdb session.
+
 .SH SEE ALSO
 .BR mosh (1),
 .BR mosh-server (1).
