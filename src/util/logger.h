@@ -29,6 +29,9 @@ extern FILE *log_output;
 
 void log_msg(int level, const char *format, ...) ATTRIBUTE ((format (printf, 2, 3))) COLD;
 
+/* parse message of the form: "error|debug|dcommon|dall", and set the log level appropriately. */
+void log_parse_level(const char *string);
+
 /* If debugging is disabled, we want to avoid calling format_address
    for every omitted debugging message.  So debug is a macro.  But
    vararg macros are not portable. */

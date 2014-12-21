@@ -442,11 +442,6 @@ Connection::Connection( const char *desired_ip, const char *desired_port ) /* se
     have_send_exception( false ),
     send_exception()
 {
-  log_output = fopen("/tmp/mosh_server.log", "wa");
-  if ( !log_output ) {
-    assert( false );
-    log_output = stderr;
-  }
   setup();
 
   /* The mosh wrapper always gives an IP request, in order
@@ -553,11 +548,6 @@ Connection::Connection( const char *key_str, const char *ip, const char *port ) 
     have_send_exception( false ),
     send_exception()
 {
-  log_output = fopen("/tmp/mosh_client.log", "wa");
-  if ( !log_output ) {
-    assert( false );
-    log_output = stderr;
-  }
   setup();
 
   std::vector< Addr > addresses = host_addresses.get_host_addresses( NULL );
