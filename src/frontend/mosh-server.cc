@@ -190,6 +190,7 @@ int main( int argc, char *argv[] )
       switch ( opt ) {
       case 'a':
 	detach = false;
+        break;
       case 'i':
 	desired_ip = optarg;
 	break;
