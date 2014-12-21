@@ -50,3 +50,31 @@ log_msg(int level, const char *format, ...)
   fflush(log_output);
   va_end(args);
 }
+
+void
+log_parse_level(const char *string) {
+  log_level = 0;
+  while (*string) {
+    if (*string == 'e') {
+      log_level |= LOG_ERROR;
+    } else if (*string == 'd') {
+      log_level |= LOG_DEBUG_ALL;
+      /* There is only one debug level currently.  with more, the syntax should be
+         dcommon, dall, etc:*/
+      string ++;
+      if (*string == 'c') {
+        log_level |= LOG_DEBUG_COMMON;
+      } else if (*string == 'a') {
+        log_level |= LOG_DEBUG_ALL;
+      }
+      //*/
+    } else if (*string == 'a') {
+      log_level |= LOG_MAX;
+    } else {
+      break;
+    }
+    while (*string && *string != '|') {
+      string++;
+    }
+  }
+}

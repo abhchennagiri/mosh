@@ -40,6 +40,7 @@
 #include "crypto.h"
 #include "locale_utils.h"
 #include "fatal_assert.h"
+#include "logger.h"
 
 /* These need to be included last because of conflicting defines. */
 /*
@@ -75,7 +76,8 @@ void usage( const char *argv0 ) {
   fprintf( stderr, "Copyright 2012 Keith Winstein <mosh-devel@mit.edu>\n" );
   fprintf( stderr, "License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.\nThis is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.\n\n" );
 
-  fprintf( stderr, "Usage: %s IP PORT\n       %s -c\n", argv0, argv0 );
+  fprintf( stderr,
+           "Usage: %s IP PORT\n       %s -c [-f <logfile>] [-d <debug-level>] [-w]\n", argv0, argv0 );
 }
 
 void print_colorcount( void )
@@ -103,7 +105,7 @@ int main( int argc, char *argv[] )
 
   /* Get arguments */
   int opt;
-  while ( (opt = getopt( argc, argv, "cw" )) != -1 ) {
+  while ( (opt = getopt( argc, argv, "cwd:f:" )) != -1 ) {
     switch ( opt ) {
     case 'c':
       print_colorcount();
@@ -113,6 +115,18 @@ int main( int argc, char *argv[] )
       /* print PID and wait for a keystroke, to let time for gdb-attaching. */
       printf("%d\n", getpid());
       getchar();
+      break;
+    case 'd':
+      log_parse_level(optarg);
+      break;
+    case 'f':
+      if ( log_output ) {
+        fclose( log_output );
+      }
+      log_output = fopen(optarg, "wa");
+      if ( !log_output ) {
+        log_output = stderr;
+      }
       break;
     default:
       usage( argv[ 0 ] );

@@ -81,6 +81,7 @@
 #include "select.h"
 #include "timestamp.h"
 #include "fatal_assert.h"
+#include "logger.h"
 
 #ifndef _PATH_BSHELL
 #define _PATH_BSHELL "/bin/sh"
@@ -102,7 +103,8 @@ using namespace std;
 
 void print_usage( const char *argv0 )
 {
-  fprintf( stderr, "Usage: %s new [-s] [-v] [-i LOCALADDR] [-p PORT[:PORT2]] [-c COLORS] [-l NAME=VALUE] [-- COMMAND...]\n", argv0 );
+  fprintf( stderr, "Usage: %s new [-s] [-v] [-i LOCALADDR] [-p PORT[:PORT2]] [-c COLORS] [-l NAME=VALUE] [-a] "
+           "[-f <logfile>] [-d <debug-level>] [-- COMMAND...]\n", argv0 );
 }
 
 void print_motd( void );
@@ -186,7 +188,7 @@ int main( int argc, char *argv[] )
        && (strcmp( argv[ 1 ], "new" ) == 0) ) {
     /* new option syntax */
     int opt;
-    while ( (opt = getopt( argc - 1, argv + 1, "ai:p:c:svl:" )) != -1 ) {
+    while ( (opt = getopt( argc - 1, argv + 1, "ai:p:c:svl:d:f:" )) != -1 ) {
       switch ( opt ) {
       case 'a':
 	detach = false;
@@ -211,6 +213,18 @@ int main( int argc, char *argv[] )
       case 'l':
 	locale_vars.push_back( string( optarg ) );
 	break;
+      case 'd':
+        log_parse_level(optarg);
+        break;
+      case 'f':
+        if ( log_output ) {
+          fclose( log_output );
+        }
+        log_output = fopen(optarg, "wa");
+        if ( !log_output ) {
+          log_output = stderr;
+        }
+        break;
       default:
 	print_usage( argv[ 0 ] );
 	/* don't die on unknown options */
