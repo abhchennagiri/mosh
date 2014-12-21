@@ -35,10 +35,7 @@
 
 #include "addresses.h"
 #include "timestamp.h"
-
-extern "C" {
-#include "addr_lib/util.h"
-}
+#include "logger.h"
 
 using namespace Network;
 
