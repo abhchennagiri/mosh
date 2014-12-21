@@ -33,9 +33,6 @@
 #define __APPLE_USE_RFC_3542
 
 #include "config.h"
-extern "C" {
-#include "util.h"
-}
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -56,6 +53,8 @@ extern "C" {
 #include "crypto.h"
 
 #include "timestamp.h"
+#include "utils.h"
+#include "logger.h"
 
 #ifndef MSG_DONTWAIT
 #define MSG_DONTWAIT MSG_NONBLOCK

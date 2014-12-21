@@ -380,7 +380,6 @@ AC_CONFIG_FILES([
   src/crypto/Makefile
   src/frontend/Makefile
   src/network/Makefile
-  src/network/addr_lib/Makefile
   src/protobufs/Makefile
   src/statesync/Makefile
   src/terminal/Makefile
