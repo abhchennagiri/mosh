@@ -38,11 +38,11 @@ void log_parse_level(const char *string);
 #if defined NO_DEBUG
 
 #if defined __STDC_VERSION__ && __STDC_VERSION__ >= 199901L
-#define debugf(...) do {} while(0)
+#define log_dbg(...) do {} while(0)
 #elif defined __GNUC__
-#define debugf(_args...) do {} while(0)
+#define log_dbg(_args...) do {} while(0)
 #else
-#define debugf if(0) log_msg
+#define log_dbg if(0) log_msg
 #endif
 
 #define DEBUG(level, statement)
@@ -50,34 +50,42 @@ void log_parse_level(const char *string);
 #else /* !NO_DEBUG */
 
 /* log levels */
-
 #define LOG_ERROR               2
 #define LOG_DEBUG               4
 #define LOG_MAX                 7
-#define LOG_GET_LEVEL(x)        (x & 0xF)
+#define LOG_GET_LEVEL(x)        ((x) & 0xF)
 
-/* log flags type */
+/* log special flags */
+#define LOG_PRINT_ERROR         (1 << 7)
 
-#define LOG_PERROR              ((1 << 7) | LOG_ERROR)
-#define LOG_DEBUG_COMMON        (1 << 8)
-#define LOG_DEBUG_ALL           (0xFF00)
+/* log debug types */
+#define LOG_DEBUG_COMMON        ((1 << 8) | LOG_DEBUG)
+#define LOG_DEBUG_ALL           ((0xFF00) | LOG_DEBUG)
+#define LOG_GET_TYPE(x)         ((x) & 0xFFF0)
+
+/* shortcuts */
+#define LOG_PERROR              (LOG_PRINT_ERROR | LOG_ERROR)
+
+#define LOG_DO_DEBUG(level)                                       \
+  UNLIKELY((LOG_GET_TYPE(level) & LOG_GET_TYPE(log_level)) &&     \
+           (LOG_DEBUG <= LOG_GET_LEVEL(log_level)))
 
 #define DEBUG(level, statement)                 \
-  if(UNLIKELY(level & log_level)) {statement;}
+  if(LOG_DO_DEBUG(level)) {statement;}
 
 #if defined __STDC_VERSION__ && __STDC_VERSION__ >= 199901L
-#define log_dbg(level, ...)                                            \
-  do {                                                                 \
-    if(UNLIKELY((level) & log_level)) log_msg(level, __VA_ARGS__);     \
+#define log_dbg(level, ...)                                             \
+  do {                                                                  \
+    if(LOG_DO_DEBUG(level)) log_msg(level, __VA_ARGS__);                \
   } while(0)
 #elif defined __GNUC__
 #define log_dbg(level, _args...)                                        \
   do {                                                                  \
-    if(UNLIKELY((level) & log_level)) log_msg(level, _args);            \
+    if(LOG_DO_DEBUG(level)) log_msg(level, _args);                      \
   } while(0)
 #else
 #warning No debug available.
-static inline void debugf(int level, const char *format, ...) { return; }
+static inline void log_dbg(int level, const char *format, ...) { return; }
 #endif
 
 #endif /* NO_DEBUG */

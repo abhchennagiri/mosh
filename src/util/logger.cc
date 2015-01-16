@@ -45,7 +45,7 @@ log_msg(int level, const char *format, ...)
   for (i = 0; i < log_indent_level; i ++)
     fprintf(log_output, "  ");
   vfprintf(log_output, format, args);
-  if (level & (LOG_PERROR & ~LOG_ERROR))
+  if (level & LOG_PERROR)
     fprintf(log_output, ": %s.\n", strerror(errno));
   fflush(log_output);
   va_end(args);
@@ -58,16 +58,17 @@ log_parse_level(const char *string) {
     if (*string == 'e') {
       log_level |= LOG_ERROR;
     } else if (*string == 'd') {
+      log_level |= LOG_DEBUG;
       log_level |= LOG_DEBUG_ALL;
       /* There is only one debug level currently.  with more, the syntax should be
-         dcommon, dall, etc:*/
+         dcommon, dall, etc:
       string ++;
       if (*string == 'c') {
         log_level |= LOG_DEBUG_COMMON;
       } else if (*string == 'a') {
         log_level |= LOG_DEBUG_ALL;
       }
-      //*/
+      */
     } else if (*string == 'a') {
       log_level |= LOG_MAX;
     } else {
