@@ -600,7 +600,7 @@ bool Connection::send_probe( Flow *flow )
 
   string p = px.tostring( &session );
 
-  log_dbg( LOG_DEBUG_COMMON, "Sending probe on %d seq %llu (%s -> %s, SRTT = %dms): ",
+  log_dbg( LOG_DEBUG_COMMON, "Sending probe on %d seq %llu (%s -> %s, SRTT = %dms)",
 	   (int)flow->flow_id, (long long unsigned)flow->next_seq - 1,
 	   flow->src.tostring().c_str(), flow->dst.tostring().c_str(), (int)flow->SRTT );
 
@@ -608,9 +608,9 @@ bool Connection::send_probe( Flow *flow )
 				   p.data(), p.size(), MSG_DONTWAIT, flow->src, flow->dst );
   if ( bytes_sent < 0 ) {
     flow->SRTT = MIN( flow->SRTT + 1000, 10000);
-    log_dbg( LOG_PERROR, "failed (SRTT = %dms)", (int)flow->SRTT );
+    log_dbg( LOG_DEBUG_COMMON | LOG_PRINT_ERROR, "failed (SRTT = %dms)", (int)flow->SRTT );
   } else {
-    log_dbg( LOG_DEBUG_COMMON, "success.\n" );
+    log_dbg( LOG_DEBUG_COMMON, ": success.\n" );
   }
 
   return ( bytes_sent != static_cast<ssize_t>( p.size() ) );
@@ -755,7 +755,7 @@ void Connection::send( uint16_t flags, string s )
       if ( errno == EADDRNOTAVAIL ) {
 	/* This should not append, since we just receive a message on this address ! */
       }
-      log_dbg( LOG_PERROR, " failed" );
+      log_dbg( LOG_DEBUG_COMMON | LOG_PERROR, " failed" );
     }
 
   } else if ( UNLIKELY( last_flow == NULL ) ) { /* First send. */
