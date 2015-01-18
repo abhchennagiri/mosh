@@ -1078,18 +1078,20 @@ void Connection::parse_received_addresses( string payload )
   const unsigned char *data = (const unsigned char*) payload.data();
   std::vector< Addr > addr;
   while( size > 0 ) {
-    int len = (int)data[0];
-    if ( size < 1 + len ) {
-      log_dbg( LOG_DEBUG_COMMON, "Truncated message received.\n" );
-      break;
-    }
+    int len;
     Addr tmp;
-    uint8_t family = data[1];
+    uint8_t family;
+    if ( size < 4) goto truncated;
+    len = (int)data[0];
+    if ( size < 1 + len ) goto truncated;
+    family = data[1];
     if ( family == 4 ) {
+      if ( size < 4 + 4) goto truncated;
       tmp = Addr( AF_INET );
       memcpy(&tmp.sin.sin_port, data + 2, 2);
       memcpy(&tmp.sin.sin_addr, data + 4, 4);
     } else if ( family == 6 ) {
+      if ( size < 4 + 16) goto truncated;
       tmp = Addr( AF_INET6 );
       memcpy(&tmp.sin6.sin6_port, data + 2, 2);
       memcpy(&tmp.sin6.sin6_addr, data + 4, 16);
@@ -1098,6 +1100,10 @@ void Connection::parse_received_addresses( string payload )
     log_dbg( LOG_DEBUG_COMMON, "Remote address received: %s.\n", tmp.tostring().c_str() );
     data += 1 + len;
     size -= 1 + len;
+    continue;
+  truncated:
+    log_dbg( LOG_DEBUG_COMMON, "Truncated message received.\n" );
+    break;
   }
   assert( size == 0 );
 
