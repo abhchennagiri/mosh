@@ -137,18 +137,18 @@ Packet Connection::new_packet( Flow *flow, uint16_t flags, string &s_payload )
   }
 
   if ( !server ) {
-    unsigned int delay = MAX( (int)flow->SRTT + 4 * flow->RTTVAR, MIN_PROBE_INTERVAL );
+    unsigned int rto = ( (unsigned int)flow->SRTT + flow->idle_time ) + 4 * flow->RTTVAR;
+    unsigned int delay = MAX( rto + delay_ack_interval, MIN_PROBE_INTERVAL );
     if ( flow->first_sent_message_since_reply <= flow->last_heard ) {
       flow->first_sent_message_since_reply = now;
-    } else if ( delay < now - flow->first_sent_message_since_reply ) {
-      flow->SRTT = now - flow->first_sent_message_since_reply;
-      log_dbg( LOG_DEBUG_COMMON, "Flow %hu seems idle: SRTT = %dms.\n",
-               flow->flow_id, (int)flow->SRTT );
+    } else if ( rto + delay_ack_interval < now - flow->first_sent_message_since_reply ) {
+      flow->idle_time = ( MAX_IDLE_TIME - flow->idle_time < rto ) ? MAX_IDLE_TIME : flow->idle_time + rto;
+      log_dbg( LOG_DEBUG_COMMON, "Flow %hu seems idle for %dms (SRTT = %dms).\n",
+	       flow->flow_id, (int)flow->idle_time, (int)flow->SRTT );
     }
 
-    if ( flags & PROBE_FLAG ) {
-      flow->next_probe = now + delay;
-    }
+    flow->next_probe = now + delay;
+    flow->rto = now + rto + delay_ack_interval;
   }
 
   Packet p( flow->next_seq++, direction, timestamp16(), outgoing_timestamp_reply,
@@ -281,8 +281,10 @@ Connection::Flow::Flow( const Addr &s_src, const Addr &s_dst )
     saved_timestamp( defaults.saved_timestamp ),
     saved_timestamp_received_at( defaults.saved_timestamp_received_at ),
     first_sent_message_since_reply( defaults.first_sent_message_since_reply ),
+    rto( defaults.rto ),
     last_heard( defaults.last_heard ),
     next_probe( defaults.next_probe ),
+    idle_time( defaults.idle_time ),
     RTT_hit( defaults.RTT_hit ),
     SRTT( defaults.SRTT ),
     RTTVAR( defaults.RTTVAR ),
@@ -303,6 +305,7 @@ Connection::Flow::Flow( const Addr &s_src, const Addr &s_dst, uint16_t id )
     saved_timestamp( defaults.saved_timestamp ),
     saved_timestamp_received_at( defaults.saved_timestamp_received_at ),
     first_sent_message_since_reply( defaults.first_sent_message_since_reply ),
+    rto( defaults.rto ),
     last_heard( defaults.last_heard ),
     next_probe( defaults.next_probe ),
     RTT_hit( defaults.RTT_hit ),
@@ -585,11 +588,13 @@ Connection::Connection( uint16_t delay_ack, const char *key_str, const char *ip,
 void Connection::send_probes( void )
 {
   assert( !server );
+  uint64_t now = timestamp();
   for ( std::map< uint16_t, Flow* >::iterator it = flows.begin();
 	it != flows.end();
 	it++ ) {
     Flow *flow = it->second;
-    if ( flow != last_flow && flow->next_probe <= timestamp() ) {
+    if ( flow != last_flow && ( flow->next_probe <= now ||
+				( flow->first_sent_message_since_reply <= flow->last_heard && flow->rto <= now ) ) ) {
       send_probe( flow );
     }
   }
@@ -609,8 +614,8 @@ bool Connection::send_probe( Flow *flow )
   ssize_t bytes_sent = sendfromto( flow->dst.sa.sa_family == AF_INET ? sock() : sock6(),
 				   p.data(), p.size(), MSG_DONTWAIT, flow->src, flow->dst );
   if ( bytes_sent < 0 ) {
-    flow->SRTT = MIN( flow->SRTT + 1000, 10000);
-    log_dbg( LOG_DEBUG_COMMON | LOG_PRINT_ERROR, "failed (SRTT = %dms)", (int)flow->SRTT );
+    flow->idle_time = MAX_IDLE_TIME;
+    log_dbg( LOG_DEBUG_COMMON | LOG_PRINT_ERROR, "failed (SRTT = %dms)", (int)flow->SRTT + flow->idle_time );
   } else {
     log_dbg( LOG_DEBUG_COMMON, ": success.\n" );
   }
@@ -776,8 +781,8 @@ void Connection::send( uint16_t flags, string s )
 	if ( errno == EMSGSIZE ) {
 	  flow->MTU = 500; /* payload MTU of last resort */
 	} else {
-          flow->SRTT = MIN( flow->SRTT + 1000, 10000);
-        }
+	  flow->idle_time = MAX_IDLE_TIME;
+	}
  	log_dbg( LOG_PERROR, " failed" );
       } else if ( bytes_sent == static_cast<ssize_t>( p.size() ) ) {
 	have_send_exception = false;
@@ -806,8 +811,8 @@ void Connection::send( uint16_t flags, string s )
 	if ( errno == EMSGSIZE ) {
 	  flow->MTU = 500; /* payload MTU of last resort */
 	} else {
-          flow->SRTT = MIN( flow->SRTT + 1000, 10000);
-        }
+	  flow->idle_time = MAX_IDLE_TIME;
+	}
  	log_dbg( LOG_PERROR, " failed" );
       } else if ( bytes_sent == static_cast<ssize_t>( p.size() ) ){
 	have_send_exception = false;
@@ -1032,6 +1037,7 @@ string Connection::recv_one( int sock_to_recv )
 
     /* auto-adjust to remote host */
     flow_info->last_heard = last_heard = timestamp();
+    flow_info->idle_time = 0;
 
     if ( server ) { /* only client can roam */
       bool has_roam = last_flow != flow_info;
