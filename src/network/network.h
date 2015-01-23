@@ -105,6 +105,7 @@ namespace Network {
     static const unsigned int PORT_HOP_INTERVAL          = 10000;
     static const unsigned int MAX_ADDR_REQUEST_INTERVAL  = 10000;
     static const unsigned int MIN_PROBE_INTERVAL         = 500;
+    static const unsigned int MAX_IDLE_TIME              = 10000;
 
     static const unsigned int MAX_PORTS_OPEN             = 10;
     static const unsigned int MAX_OLD_SOCKET_AGE         = 60000;
@@ -117,7 +118,7 @@ namespace Network {
       Flow( void )
 	: src( Addr() ), dst( Addr() ), MTU( DEFAULT_SEND_MTU ), next_seq( 0 ),
 	expected_receiver_seq( 0 ), saved_timestamp( -1 ), saved_timestamp_received_at( 0 ),
-	first_sent_message_since_reply( 0 ), last_heard( 0 ), next_probe( 0 ),
+	first_sent_message_since_reply( 0 ), rto( 0 ), last_heard( 0 ), next_probe( 0 ), idle_time( 0 ),
 	RTT_hit( false ), SRTT( 1000 ), RTTVAR( 500 ), flow_id( 0 )
       {}
 
@@ -131,8 +132,10 @@ namespace Network {
       uint16_t saved_timestamp;
       uint64_t saved_timestamp_received_at;
       uint64_t first_sent_message_since_reply;
+      uint64_t rto;
       uint64_t last_heard;
       uint64_t next_probe;
+      unsigned int idle_time;
       bool RTT_hit;
       double SRTT;
       double RTTVAR;
@@ -140,7 +143,8 @@ namespace Network {
 
       static bool srtt_order( std::pair< uint16_t, Flow* > const &f1,
 			      std::pair< uint16_t, Flow* > const &f2 ) {
-	return f1.second->SRTT < f2.second->SRTT;
+	return (unsigned int)f1.second->SRTT + f1.second->idle_time <
+          (unsigned int)f2.second->SRTT + f2.second->idle_time;
       }
 
       Flow( const Addr &src, const Addr &dst ); /* client only */
@@ -181,7 +185,6 @@ namespace Network {
 
     Direction direction;
 
-    uint64_t last_send;
     const uint16_t delay_ack_interval;
     uint64_t last_heard;
     uint64_t last_port_choice;
