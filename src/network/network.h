@@ -79,10 +79,10 @@ namespace Network {
     
     Packet( uint64_t s_seq, Direction s_direction,
 	    uint16_t s_timestamp, uint16_t s_timestamp_reply,
-            uint16_t s_flow_id, uint16_t s_flags, string s_payload )
+	    uint16_t s_flow_id, uint16_t s_flags, string s_payload )
       : seq( s_seq ), direction( s_direction ),
 	timestamp( s_timestamp ), timestamp_reply( s_timestamp_reply ),
-        flow_id( s_flow_id ), flags( s_flags ), payload( s_payload )
+	flow_id( s_flow_id ), flags( s_flags ), payload( s_payload )
     {}
     
     Packet( string coded_packet, Session *session );
@@ -144,7 +144,7 @@ namespace Network {
       static bool srtt_order( std::pair< uint16_t, Flow* > const &f1,
 			      std::pair< uint16_t, Flow* > const &f2 ) {
 	return (unsigned int)f1.second->SRTT + f1.second->idle_time <
-          (unsigned int)f2.second->SRTT + f2.second->idle_time;
+	  (unsigned int)f2.second->SRTT + f2.second->idle_time;
       }
 
       Flow( const Addr &src, const Addr &dst ); /* client only */

@@ -114,7 +114,7 @@ string Packet::tostring( Session *session )
   uint64_t direction_id_seq = TO_DIRECTION( direction ) | TO_FLOWID( flow_id ) | (seq & SEQUENCE_MASK);
 
   uint16_t ts_net[ 2 ] = { static_cast<uint16_t>( htobe16( timestamp ) ),
-                           static_cast<uint16_t>( htobe16( timestamp_reply ) ) };
+			   static_cast<uint16_t>( htobe16( timestamp_reply ) ) };
   uint16_t flags_net = static_cast<uint16_t>( htobe16( flags ) );
 
   string timestamps = string( (char *)ts_net, 2 * sizeof( uint16_t ) );
@@ -251,9 +251,9 @@ void Connection::check_flows( bool remote_has_changed ) {
 	  ra_it != remote_addr.end();
 	  ra_it++ ) {
       if ( Addresses::compatible( *la_it, *ra_it ) &&
-           ! flow_exists( *la_it, *ra_it ) ) {
-        Flow *flow_info = new Flow( *la_it, *ra_it );
-        flows[ flow_info->flow_id ] = flow_info;
+	   ! flow_exists( *la_it, *ra_it ) ) {
+	Flow *flow_info = new Flow( *la_it, *ra_it );
+	flows[ flow_info->flow_id ] = flow_info;
       }
     }
 
@@ -261,9 +261,9 @@ void Connection::check_flows( bool remote_has_changed ) {
 	  ra_it != received_remote_addr.end();
 	  ra_it++ ) {
       if ( Addresses::compatible( *la_it, *ra_it ) &&
-           ! flow_exists( *la_it, *ra_it ) ) {
-        Flow *flow_info = new Flow( *la_it, *ra_it );
-        flows[ flow_info->flow_id ] = flow_info;
+	   ! flow_exists( *la_it, *ra_it ) ) {
+	Flow *flow_info = new Flow( *la_it, *ra_it );
+	flows[ flow_info->flow_id ] = flow_info;
       }
     }
   }
