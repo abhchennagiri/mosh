@@ -181,6 +181,8 @@ namespace Network {
 
     Direction direction;
 
+    uint64_t last_send;
+    const uint16_t delay_ack_interval;
     uint64_t last_heard;
     uint64_t last_port_choice;
     uint64_t last_addr_request;
@@ -213,8 +215,8 @@ namespace Network {
     void parse_received_addresses( string payload );
 
   public:
-    Connection( const char *desired_ip, const char *desired_port ); /* server */
-    Connection( const char *key_str, const char *ip, const char *port ); /* client */
+    Connection( uint16_t delay_ack, const char *desired_ip, const char *desired_port ); /* server */
+    Connection( uint16_t delay_ack, const char *key_str, const char *ip, const char *port ); /* client */
 
     void send( string s );
     string recv( void );

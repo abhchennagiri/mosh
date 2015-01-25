@@ -423,7 +423,7 @@ private:
   AddrInfo &operator=(const AddrInfo &);
 };
 
-Connection::Connection( const char *desired_ip, const char *desired_port ) /* server */
+Connection::Connection( uint16_t delay_ack, const char *desired_ip, const char *desired_port ) /* server */
   : socks(),
     socks6(),
     remote_addr(),
@@ -435,6 +435,7 @@ Connection::Connection( const char *desired_ip, const char *desired_port ) /* se
     key(),
     session( key ),
     direction( TO_CLIENT ),
+    delay_ack_interval( delay_ack ),
     last_heard( -1 ),
     last_port_choice( -1 ),
     last_addr_request( -1 ),
@@ -529,7 +530,7 @@ bool Connection::Socket::try_bind( int sock, Addr local_addr, int port_low, int 
   return false;
 }
 
-Connection::Connection( const char *key_str, const char *ip, const char *port ) /* client */
+Connection::Connection( uint16_t delay_ack, const char *key_str, const char *ip, const char *port ) /* client */
   : socks(),
     socks6(),
     remote_addr(),
@@ -541,6 +542,7 @@ Connection::Connection( const char *key_str, const char *ip, const char *port ) 
     key( key_str ),
     session( key ),
     direction( TO_SERVER ),
+    delay_ack_interval( delay_ack ),
     last_heard( -1 ),
     last_port_choice( -1 ),
     last_addr_request( -1 ),
