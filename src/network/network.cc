@@ -796,10 +796,15 @@ void Connection::send( uint16_t flags, string s )
   } else {
     std::vector< std::pair< uint16_t, Flow* > > flows_vect( flows.begin(), flows.end() );
     std::sort( flows_vect.begin(), flows_vect.end(), Flow::srtt_order );
+    bool possible_idle_send = false;
     for ( std::vector< std::pair< uint16_t, Flow* > >::const_iterator it = flows_vect.begin();
 	  it != flows_vect.end();
 	  it ++ ) {
       Flow *flow = it->second;
+      if ( possible_idle_send && flow->idle_time ) {
+	/* search a reactive flow, even if slow */
+	continue;
+      }
       Packet px = new_packet( flow, flags, s );
       string p = px.tostring( &session );
       log_dbg( LOG_DEBUG_COMMON, "Sending data on %hu seq %llu (%s -> %s, SRTT = %dms)",
@@ -822,7 +827,11 @@ void Connection::send( uint16_t flags, string s )
 	} else {
 	  log_dbg( LOG_DEBUG_COMMON, ": success.\n" );
 	}
-	break;
+	if ( flow->idle_time ) {
+	  possible_idle_send = true;
+	} else {
+	  break;
+	}
       } else {
 	log_dbg( LOG_DEBUG_COMMON, ": failed (partial).\n" );
       }
@@ -1040,17 +1049,18 @@ string Connection::recv_one( int sock_to_recv )
     flow_info->idle_time = 0;
 
     if ( server ) { /* only client can roam */
-      bool has_roam = last_flow != flow_info;
+      bool has_roam = last_flow != flow_info &&
+	( !last_flow || ( last_flow->last_heard - last_flow->SRTT < now - flow_info->SRTT ) );
       if ( p.is_probe() ) {
-	if ( UNLIKELY( !last_flow ) ) { /* This should only occurs once. */
+	if ( UNLIKELY( !last_flow ) ) { /* This should occurs at most once. */
 	  last_flow = flow_info;
 	}
 	send_probe( flow_info );
 	return p.payload;
       }
-      last_flow = flow_info;
 
       if ( has_roam ) {
+	last_flow = flow_info;
 	char host[ NI_MAXHOST ], serv[ NI_MAXSERV ];
 	int errcode = getnameinfo( &last_flow->dst.sa, last_flow->dst.addrlen,
 				   host, sizeof( host ), serv, sizeof( serv ),
