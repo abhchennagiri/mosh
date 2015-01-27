@@ -91,9 +91,15 @@ namespace Network {
       }
 
       if ( sa.sa_family == AF_INET ) {
+	if ( sin.sin_port != a2.sin.sin_port ) {
+	  return sin.sin_port - a2.sin.sin_port;
+	}
 	return memcmp( &sin.sin_addr, &a2.sin.sin_addr, 4 );
       }
       if ( sa.sa_family == AF_INET6 ) {
+	if ( sin6.sin6_port != a2.sin6.sin6_port ) {
+	  return sin6.sin6_port - a2.sin6.sin6_port;
+	}
 	return memcmp( &sin6.sin6_addr, &a2.sin6.sin6_addr, 16 );
       }
       return memcmp( &ss, &a2.ss, sizeof( ss ) );

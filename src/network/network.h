@@ -73,20 +73,19 @@ namespace Network {
     uint64_t seq;
     Direction direction;
     uint16_t timestamp, timestamp_reply;
-    uint16_t flow_id;
-    uint16_t flags;
+    uint8_t flags;
     string payload;
     
     Packet( uint64_t s_seq, Direction s_direction,
 	    uint16_t s_timestamp, uint16_t s_timestamp_reply,
-	    uint16_t s_flow_id, uint16_t s_flags, string s_payload )
+	    uint8_t s_flags, string s_payload )
       : seq( s_seq ), direction( s_direction ),
 	timestamp( s_timestamp ), timestamp_reply( s_timestamp_reply ),
-	flow_id( s_flow_id ), flags( s_flags ), payload( s_payload )
+        flags( s_flags ), payload( s_payload )
     {}
     
-    Packet( string coded_packet, Session *session );
-    
+    Packet( string coded_packet, Session *session, bool remote_is_multipath );
+
     bool is_probe( void );
     bool is_addr_msg( void );
     string tostring( Session *session );
@@ -112,22 +111,27 @@ namespace Network {
 
     static const int CONGESTION_TIMESTAMP_PENALTY = 500; /* ms */
 
-    class Flow {
-    private:
-      static uint16_t next_flow_id;
-      Flow( void )
-	: src( Addr() ), dst( Addr() ), MTU( DEFAULT_SEND_MTU ), next_seq( 0 ),
-	expected_receiver_seq( 0 ), saved_timestamp( -1 ), saved_timestamp_received_at( 0 ),
-	first_sent_message_since_reply( 0 ), rto( 0 ), last_heard( 0 ), next_probe( 0 ), idle_time( 0 ),
-	RTT_hit( false ), SRTT( 1000 ), RTTVAR( 500 ), flow_id( 0 )
-      {}
+    struct Flow_Key {
+      Addr src;
+      Addr dst;
 
+      Flow_Key( const Addr &s_src, const Addr &s_dst ) : src( s_src ), dst( s_dst ) {}
+
+      bool operator<( const struct Flow_Key &k ) const {
+	int cmp = src.compare( k.src );
+	if ( cmp != 0 ) {
+	  return cmp < 0;
+	}
+        cmp = dst.compare( k.dst );
+	return cmp < 0;
+      }
+    };
+
+    class Flow {
     public:
-      static const Flow defaults; /* for default values only */
       Addr src;
       Addr dst;
       int MTU;
-      uint64_t next_seq;
       uint64_t expected_receiver_seq;
       uint16_t saved_timestamp;
       uint64_t saved_timestamp_received_at;
@@ -139,16 +143,14 @@ namespace Network {
       bool RTT_hit;
       double SRTT;
       double RTTVAR;
-      const uint16_t flow_id;
 
-      static bool srtt_order( std::pair< uint16_t, Flow* > const &f1,
-			      std::pair< uint16_t, Flow* > const &f2 ) {
+      static bool srtt_order( std::pair< Flow_Key, Flow* > const &f1,
+			      std::pair< Flow_Key, Flow* > const &f2 ) {
 	return (unsigned int)f1.second->SRTT + f1.second->idle_time <
 	  (unsigned int)f2.second->SRTT + f2.second->idle_time;
       }
 
-      Flow( const Addr &src, const Addr &dst ); /* client only */
-      Flow( const Addr &src, const Addr &dst, uint16_t id ); /* server only */
+      Flow( const Addr &src, const Addr &dst );
     };
 
     class Socket
@@ -172,11 +174,12 @@ namespace Network {
     std::deque< Socket > socks6;
     std::vector< Addr > remote_addr;
     std::vector< Addr > received_remote_addr;
-    std::map< uint16_t, Flow* > flows; /* do NEVER remove flows when server, for security reason. */
+    std::map< Flow_Key, Flow* > flows; /* do NEVER remove flows when server, for security reason. */
     Flow *last_flow;
     Addresses host_addresses;
 
     bool server;
+    bool remote_is_multipath;
 
     Base64Key key;
     Session session;
@@ -184,6 +187,7 @@ namespace Network {
     void setup( void );
 
     Direction direction;
+    uint64_t next_seq;
 
     const uint16_t delay_ack_interval;
     uint64_t last_heard;
@@ -196,7 +200,7 @@ namespace Network {
     bool have_send_exception;
     NetworkException send_exception;
 
-    Packet new_packet( Flow *flow, uint16_t flags, string &s_payload );
+    Packet new_packet( Flow *flow, uint8_t flags, string &s_payload );
 
     void hop_port( void );
     void check_remote_addr( void );
@@ -209,7 +213,7 @@ namespace Network {
     void prune_sockets( void );
     void prune_sockets( std::deque< Socket > &socks_vect );
 
-    void send( uint16_t flags, string s );
+    void send( uint8_t flags, string s );
     void send_probes( void );
     bool send_probe( Flow *flow );
     void send_addresses( void );

@@ -65,17 +65,19 @@ using namespace Network;
 using namespace Crypto;
 
 const uint64_t DIRECTION_MASK = 0x8000000000000000;
-const uint64_t FLOWID_MASK    = 0x7FFF000000000000;
-const uint64_t SEQUENCE_MASK  = 0x0000FFFFFFFFFFFF;
+const uint64_t SEQUENCE_MASK  = 0x7FFFFFFFFFFFFFFC;
+const uint64_t FLAG_MASK      = 0x0000000000000003;
 #define TO_DIRECTION(d) (uint64_t( (d) == TO_CLIENT ) << 63)
-#define TO_FLOWID(id) (uint64_t( id ) << 48)
+#define TO_SEQ(seq) (uint64_t( seq ) << 2)
+#define TO_FLAGS(flags) (uint64_t( flags ) << 0)
 #define GET_DIRECTION(nonce) ( ((nonce) & DIRECTION_MASK) ? TO_CLIENT : TO_SERVER )
-#define GET_FLOWID(nonce) ( uint16_t( ( (nonce) & FLOWID_MASK ) >> 48 ) )
+#define GET_SEQ(nonce) ( uint16_t( ( (nonce) & SEQUENCE_MASK ) >> 2 ) )
+#define GET_FLAGS(flags) ( ( (flags) & FLAG_MASK ) >> 0)
 const uint16_t PROBE_FLAG = 1 << 0;
 const uint16_t ADDR_FLAG = 1 << 1;
 
 /* Read in packet from coded string */
-Packet::Packet( string coded_packet, Session *session )
+Packet::Packet( string coded_packet, Session *session, bool remote_is_multipath )
   : seq( -1 ),
     direction( TO_SERVER ),
     timestamp( -1 ),
@@ -85,17 +87,21 @@ Packet::Packet( string coded_packet, Session *session )
   Message message = session->decrypt( coded_packet );
 
   direction = GET_DIRECTION( message.nonce.val() );
-  flow_id = GET_FLOWID( message.nonce.val() );
-  seq = message.nonce.val() & SEQUENCE_MASK;
+  if ( remote_is_multipath ) {
+    seq = GET_SEQ( message.nonce.val() );
+    flags = GET_FLAGS( message.nonce.val() );
+  } else {
+    seq = message.nonce.val() & 0x7FFFFFFFFFFFFFFF;
+    flags = 0;
+  }
 
-  dos_assert( message.text.size() >= 3 * sizeof( uint16_t ) );
+  dos_assert( message.text.size() >= 2 * sizeof( uint16_t ) );
 
   uint16_t *data = (uint16_t *)message.text.data();
   timestamp = be16toh( data[ 0 ] );
   timestamp_reply = be16toh( data[ 1 ] );
-  flags = be16toh( data[2] );
 
-  payload = string( message.text.begin() + 3 * sizeof( uint16_t ), message.text.end() );
+  payload = string( message.text.begin() + 2 * sizeof( uint16_t ), message.text.end() );
 }
 
 bool Packet::is_probe( void )
@@ -111,19 +117,17 @@ bool Packet::is_addr_msg( void )
 /* Output coded string from packet */
 string Packet::tostring( Session *session )
 {
-  uint64_t direction_id_seq = TO_DIRECTION( direction ) | TO_FLOWID( flow_id ) | (seq & SEQUENCE_MASK);
+  uint64_t direction_seq_flags = TO_DIRECTION( direction ) | TO_SEQ( seq ) | TO_FLAGS( flags );
 
   uint16_t ts_net[ 2 ] = { static_cast<uint16_t>( htobe16( timestamp ) ),
 			   static_cast<uint16_t>( htobe16( timestamp_reply ) ) };
-  uint16_t flags_net = static_cast<uint16_t>( htobe16( flags ) );
 
   string timestamps = string( (char *)ts_net, 2 * sizeof( uint16_t ) );
-  string flags_string = string( (char *)&flags_net, sizeof( uint16_t ) );
 
-  return session->encrypt( Message( Nonce( direction_id_seq ), timestamps + flags_string + payload ) );
+  return session->encrypt( Message( Nonce( direction_seq_flags ), timestamps + payload ) );
 }
 
-Packet Connection::new_packet( Flow *flow, uint16_t flags, string &s_payload )
+Packet Connection::new_packet( Flow *flow, uint8_t flags, string &s_payload )
 {
   uint16_t outgoing_timestamp_reply = -1;
 
@@ -143,16 +147,16 @@ Packet Connection::new_packet( Flow *flow, uint16_t flags, string &s_payload )
       flow->first_sent_message_since_reply = now;
     } else if ( rto + delay_ack_interval < now - flow->first_sent_message_since_reply ) {
       flow->idle_time = ( MAX_IDLE_TIME - flow->idle_time < rto ) ? MAX_IDLE_TIME : flow->idle_time + rto;
-      log_dbg( LOG_DEBUG_COMMON, "Flow %hu seems idle for %dms (SRTT = %dms).\n",
-	       flow->flow_id, (int)flow->idle_time, (int)flow->SRTT );
+      log_dbg( LOG_DEBUG_COMMON, "Flow (%s -> %s, SRTT = %dms) seems idle for %dms.\n",
+	       flow->src.tostring().c_str(), flow->dst.tostring().c_str(), (int)flow->SRTT,
+	       (int)flow->idle_time );
     }
 
     flow->next_probe = now + delay;
     flow->rto = now + rto + delay_ack_interval;
   }
 
-  Packet p( flow->next_seq++, direction, timestamp16(), outgoing_timestamp_reply,
-	    flow->flow_id, flags, s_payload );
+  Packet p( next_seq++, direction, timestamp16(), outgoing_timestamp_reply, flags, s_payload );
 
   return p;
 }
@@ -208,7 +212,7 @@ void Connection::check_remote_addr( void ) {
 }
 
 bool Connection::flow_exists( const Addr &src, const Addr &dst ) {
-  for ( std::map< uint16_t, Flow* >::iterator it = flows.begin();
+  for ( std::map< Flow_Key, Flow* >::iterator it = flows.begin();
 	it != flows.end();
 	it++ ) {
     if ( it->second->src == src && it->second->dst == dst ) {
@@ -253,7 +257,8 @@ void Connection::check_flows( bool remote_has_changed ) {
       if ( Addresses::compatible( *la_it, *ra_it ) &&
 	   ! flow_exists( *la_it, *ra_it ) ) {
 	Flow *flow_info = new Flow( *la_it, *ra_it );
-	flows[ flow_info->flow_id ] = flow_info;
+	Flow_Key key( *la_it, *ra_it );
+	flows[ key ] = flow_info;
       }
     }
 
@@ -263,57 +268,29 @@ void Connection::check_flows( bool remote_has_changed ) {
       if ( Addresses::compatible( *la_it, *ra_it ) &&
 	   ! flow_exists( *la_it, *ra_it ) ) {
 	Flow *flow_info = new Flow( *la_it, *ra_it );
-	flows[ flow_info->flow_id ] = flow_info;
+	Flow_Key key( *la_it, *ra_it );
+	flows[ key ] = flow_info;
       }
     }
   }
 }
 
-uint16_t Connection::Flow::next_flow_id = 0;
-const Connection::Flow Connection::Flow::defaults;
-
 Connection::Flow::Flow( const Addr &s_src, const Addr &s_dst )
   : src( s_src ),
     dst( s_dst ),
-    MTU( defaults.MTU ),
-    next_seq( defaults.next_seq ),
-    expected_receiver_seq( defaults.expected_receiver_seq ),
-    saved_timestamp( defaults.saved_timestamp ),
-    saved_timestamp_received_at( defaults.saved_timestamp_received_at ),
-    first_sent_message_since_reply( defaults.first_sent_message_since_reply ),
-    rto( defaults.rto ),
-    last_heard( defaults.last_heard ),
-    next_probe( defaults.next_probe ),
-    idle_time( defaults.idle_time ),
-    RTT_hit( defaults.RTT_hit ),
-    SRTT( defaults.SRTT ),
-    RTTVAR( defaults.RTTVAR ),
-    flow_id( next_flow_id++ )
+    MTU( DEFAULT_SEND_MTU ),
+    expected_receiver_seq( 0 ),
+    saved_timestamp( -1 ),
+    saved_timestamp_received_at( 0 ),
+    first_sent_message_since_reply( 0 ),
+    rto( 0 ),
+    last_heard( 0 ),
+    next_probe( 0 ),
+    idle_time( 0 ),
+    RTT_hit( false ),
+    SRTT( 1000 ),
+    RTTVAR( 500 )
 {
-  if ( flow_id == 0xFFFF ) {
-    fprintf( stderr, "Max flow ID reached, exit before nonce be corrupted\n." );
-    throw;
-  }
-}
-
-Connection::Flow::Flow( const Addr &s_src, const Addr &s_dst, uint16_t id )
-  : src( s_src ),
-    dst( s_dst ),
-    MTU( defaults.MTU ),
-    next_seq( defaults.next_seq ),
-    expected_receiver_seq( defaults.expected_receiver_seq ),
-    saved_timestamp( defaults.saved_timestamp ),
-    saved_timestamp_received_at( defaults.saved_timestamp_received_at ),
-    first_sent_message_since_reply( defaults.first_sent_message_since_reply ),
-    rto( defaults.rto ),
-    last_heard( defaults.last_heard ),
-    next_probe( defaults.next_probe ),
-    RTT_hit( defaults.RTT_hit ),
-    SRTT( defaults.SRTT ),
-    RTTVAR( defaults.RTTVAR ),
-    flow_id( id )
-{
-  assert( !next_flow_id ); /* The server should not have initialized any flow. */
 }
 
 Connection::Socket::Socket( int family, int lower_port, int higher_port )
@@ -435,9 +412,11 @@ Connection::Connection( uint16_t delay_ack, const char *desired_ip, const char *
     last_flow( NULL ),
     host_addresses(),
     server( true ),
+    remote_is_multipath( true ),
     key(),
     session( key ),
     direction( TO_CLIENT ),
+    next_seq( 0 ),
     delay_ack_interval( delay_ack ),
     last_heard( -1 ),
     last_port_choice( -1 ),
@@ -542,9 +521,11 @@ Connection::Connection( uint16_t delay_ack, const char *key_str, const char *ip,
     last_flow( NULL ),
     host_addresses(),
     server( false ),
+    remote_is_multipath( true ),
     key( key_str ),
     session( key ),
     direction( TO_SERVER ),
+    next_seq( 0 ),
     delay_ack_interval( delay_ack ),
     last_heard( -1 ),
     last_port_choice( -1 ),
@@ -589,7 +570,7 @@ void Connection::send_probes( void )
 {
   assert( !server );
   uint64_t now = timestamp();
-  for ( std::map< uint16_t, Flow* >::iterator it = flows.begin();
+  for ( std::map< Flow_Key, Flow* >::iterator it = flows.begin();
 	it != flows.end();
 	it++ ) {
     Flow *flow = it->second;
@@ -607,8 +588,8 @@ bool Connection::send_probe( Flow *flow )
 
   string p = px.tostring( &session );
 
-  log_dbg( LOG_DEBUG_COMMON, "Sending probe on %d seq %llu (%s -> %s, SRTT = %dms)",
-	   (int)flow->flow_id, (long long unsigned)flow->next_seq - 1,
+  log_dbg( LOG_DEBUG_COMMON, "Sending probe seq %llu (%s -> %s, SRTT = %dms)",
+	   (long long unsigned)next_seq - 1,
 	   flow->src.tostring().c_str(), flow->dst.tostring().c_str(), (int)flow->SRTT );
 
   ssize_t bytes_sent = sendfromto( flow->dst.sa.sa_family == AF_INET ? sock() : sock6(),
@@ -733,7 +714,7 @@ void Connection::send( string s )
   send( 0, s);
 }
 
-void Connection::send( uint16_t flags, string s )
+void Connection::send( uint8_t flags, string s )
 {
   if ( server && !last_flow ) {
     return;
@@ -749,8 +730,8 @@ void Connection::send( uint16_t flags, string s )
 
     string p = px.tostring( &session );
 
-    log_dbg( LOG_DEBUG_COMMON, "Sending data on %hu seq %llu (%s -> %s, SRTT = %dms)",
-	     last_flow->flow_id, (long long unsigned) last_flow->next_seq - 1, last_flow->src.tostring().c_str(),
+    log_dbg( LOG_DEBUG_COMMON, "Sending data seq %llu (%s -> %s, SRTT = %dms)",
+	     (long long unsigned) next_seq - 1, last_flow->src.tostring().c_str(),
 	     last_flow->dst.tostring().c_str(), (int)last_flow->SRTT );
 
     bytes_sent = sendfromto( last_flow->dst.sa.sa_family == AF_INET ? sock() : sock6(),
@@ -766,14 +747,14 @@ void Connection::send( uint16_t flags, string s )
     }
 
   } else if ( UNLIKELY( last_flow == NULL ) ) { /* First send. */
-    for ( std::map< uint16_t, Flow* >::iterator it = flows.begin();
+    for ( std::map< Flow_Key, Flow* >::iterator it = flows.begin();
 	  it != flows.end();
 	  it++ ) {
       Flow *flow = it->second;
       Packet px = new_packet( flow, flags, s );
       string p = px.tostring( &session );
-      log_dbg( LOG_DEBUG_COMMON, "Sending data on %hu seq %llu (%s -> %s, SRTT = %dms)",
-	       flow->flow_id, (long long unsigned) flow->next_seq - 1, flow->src.tostring().c_str(),
+      log_dbg( LOG_DEBUG_COMMON, "Sending data seq %llu (%s -> %s, SRTT = %dms)",
+	       (long long unsigned) next_seq - 1, flow->src.tostring().c_str(),
 	       flow->dst.tostring().c_str(), (int)flow->SRTT );
       bytes_sent = sendfromto( flow->dst.sa.sa_family == AF_INET ? sock() : sock6(),
 			       p.data(), p.size(), MSG_DONTWAIT, flow->src, flow->dst );
@@ -794,10 +775,10 @@ void Connection::send( uint16_t flags, string s )
     }
 
   } else {
-    std::vector< std::pair< uint16_t, Flow* > > flows_vect( flows.begin(), flows.end() );
+    std::vector< std::pair< Flow_Key, Flow* > > flows_vect( flows.begin(), flows.end() );
     std::sort( flows_vect.begin(), flows_vect.end(), Flow::srtt_order );
     bool possible_idle_send = false;
-    for ( std::vector< std::pair< uint16_t, Flow* > >::const_iterator it = flows_vect.begin();
+    for ( std::vector< std::pair< Flow_Key, Flow* > >::const_iterator it = flows_vect.begin();
 	  it != flows_vect.end();
 	  it ++ ) {
       Flow *flow = it->second;
@@ -807,8 +788,8 @@ void Connection::send( uint16_t flags, string s )
       }
       Packet px = new_packet( flow, flags, s );
       string p = px.tostring( &session );
-      log_dbg( LOG_DEBUG_COMMON, "Sending data on %hu seq %llu (%s -> %s, SRTT = %dms)",
-	       flow->flow_id, (long long unsigned) flow->next_seq - 1, flow->src.tostring().c_str(),
+      log_dbg( LOG_DEBUG_COMMON, "Sending data seq %llu (%s -> %s, SRTT = %dms)",
+	       (long long unsigned) next_seq - 1, flow->src.tostring().c_str(),
 	       flow->dst.tostring().c_str(), (int)flow->SRTT );
       bytes_sent = sendfromto( flow->dst.sa.sa_family == AF_INET ? sock() : sock6(),
 			       p.data(), p.size(), MSG_DONTWAIT, flow->src, flow->dst );
@@ -822,7 +803,7 @@ void Connection::send( uint16_t flags, string s )
       } else if ( bytes_sent == static_cast<ssize_t>( p.size() ) ){
 	have_send_exception = false;
 	if ( last_flow != flow ) {
-	  log_dbg( LOG_DEBUG_COMMON, ": switching from %hu.\n", last_flow->flow_id );
+	  log_dbg( LOG_DEBUG_COMMON, ": switching.\n");
 	  last_flow = flow;
 	} else {
 	  log_dbg( LOG_DEBUG_COMMON, ": success.\n" );
@@ -979,21 +960,19 @@ string Connection::recv_one( int sock_to_recv )
 
   packet_remote_addr.addrlen = header.msg_namelen;
 
-  Packet p( string( msg_payload, received_len ), &session );
+  Packet p( string( msg_payload, received_len ), &session, remote_is_multipath );
 
-  Flow *flow_info = flows[ p.flow_id ];
+  Flow_Key key( packet_local_addr, packet_remote_addr );
+  Flow *flow_info = flows[ key ];
   log_dbg( LOG_DEBUG_COMMON, "timestamp = %llu\n", (long long unsigned)now );
-  log_dbg( LOG_DEBUG_COMMON, "Receiving message on flow %d seq %llu (%s <- %s): ", (int) p.flow_id,
+  log_dbg( LOG_DEBUG_COMMON, "Receiving message seq %llu (%s <- %s): ",
 	   (long long unsigned)p.seq, packet_local_addr.tostring().c_str(), packet_remote_addr.tostring().c_str() );
   if ( !flow_info ) {
-    fatal_assert( server ); /* if client, then server answers with an unknown flow ID. This is terrific. */
-    flow_info = new Flow( packet_local_addr, packet_remote_addr, p.flow_id );
-    flows[ p.flow_id ] = flow_info;
-  } else if ( server ) {
-    /* the destination may change, especially when client hop port.  Not sure
-       about the source, but anyway... */
-    flow_info->src = packet_local_addr;
-    flow_info->dst = packet_remote_addr;
+    if ( !server ) {
+      throw NetworkException( "New flow received while beeing client!", 0 );
+    }
+    flow_info = new Flow( packet_local_addr, packet_remote_addr );
+    flows[ key ] = flow_info;
   }
 
   dos_assert( p.direction == (server ? TO_SERVER : TO_CLIENT) ); /* prevent malicious playback to sender */
@@ -1186,7 +1165,9 @@ uint16_t Network::timestamp_diff( uint16_t tsnew, uint16_t tsold )
 
 uint64_t Connection::timeout( void ) const
 {
-  const Flow *flow = last_flow ? last_flow : &Flow::defaults;
+  Addr empty;
+  static Flow defaults( empty, empty );
+  const Flow *flow = last_flow ? last_flow : &defaults;
   uint64_t RTO = lrint( ceil( flow->SRTT + 4 * flow->RTTVAR ) );
   if ( RTO < MIN_RTO ) {
     RTO = MIN_RTO;
