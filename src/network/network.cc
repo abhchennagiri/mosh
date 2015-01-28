@@ -203,6 +203,9 @@ void Connection::prune_sockets( std::deque< Socket > &socks_queue )
 }
 
 void Connection::check_remote_addr( void ) {
+  if ( !remote_is_multipath ) {
+    return;
+  }
   uint64_t now = timestamp();
   if ( now - last_addr_request > MAX_ADDR_REQUEST_INTERVAL ) {
     last_addr_request = now;
@@ -569,6 +572,9 @@ Connection::Connection( uint16_t delay_ack, const char *key_str, const char *ip,
 void Connection::send_probes( void )
 {
   assert( !server );
+  if ( !remote_is_multipath ) {
+    return;
+  }
   uint64_t now = timestamp();
   for ( std::map< Flow_Key, Flow* >::iterator it = flows.begin();
 	it != flows.end();
@@ -995,6 +1001,12 @@ string Connection::recv_one( int sock_to_recv )
       }
     }
 
+    if ( p.is_probe() && !p.payload.empty() ) {
+      remote_is_multipath = false;
+      flow_info->expected_receiver_seq = 1;
+      p.flags = 0;
+    }
+
     if ( p.is_probe() ) {
       log_dbg( LOG_DEBUG_COMMON, "probe, " );
     } else {
@@ -1102,7 +1114,10 @@ void Connection::parse_received_addresses( string payload )
     log_dbg( LOG_DEBUG_COMMON, "Truncated message received.\n" );
     break;
   }
-  assert( size == 0 );
+  if( size != 0 ) {
+    remote_is_multipath = false;
+    throw NetworkException( "Multipath disabled", 0 );
+  }
 
   /* don't retain addresses already registered in remote_addr */
   received_remote_addr.resize( addr.size() );
