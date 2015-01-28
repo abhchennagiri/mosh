@@ -142,6 +142,7 @@ Packet Connection::new_packet( Flow *flow, uint16_t flags, string &s_payload )
     if ( flow->first_sent_message_since_reply <= flow->last_heard ) {
       flow->first_sent_message_since_reply = now;
     } else if ( rto + delay_ack_interval < now - flow->first_sent_message_since_reply ) {
+      flow->first_sent_message_since_reply = now;
       flow->idle_time = ( MAX_IDLE_TIME - flow->idle_time < rto ) ? MAX_IDLE_TIME : flow->idle_time + rto;
       log_dbg( LOG_DEBUG_COMMON, "Flow %hu seems idle for %dms (SRTT = %dms).\n",
 	       flow->flow_id, (int)flow->idle_time, (int)flow->SRTT );
