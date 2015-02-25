@@ -118,7 +118,7 @@ namespace Network {
       Flow( void )
 	: src( Addr() ), dst( Addr() ), MTU( DEFAULT_SEND_MTU ), next_seq( 0 ),
 	expected_receiver_seq( 0 ), saved_timestamp( -1 ), saved_timestamp_received_at( 0 ),
-	first_sent_message_since_reply( 0 ), rto( 0 ), last_heard( 0 ), next_probe( 0 ), idle_time( 0 ),
+	rto( UINT64_MAX ), last_heard( 0 ), next_probe( 0 ), idle_time( 0 ),
 	RTT_hit( false ), SRTT( 1000 ), RTTVAR( 500 ), flow_id( 0 )
       {}
 
@@ -131,7 +131,6 @@ namespace Network {
       uint64_t expected_receiver_seq;
       uint16_t saved_timestamp;
       uint64_t saved_timestamp_received_at;
-      uint64_t first_sent_message_since_reply;
       uint64_t rto;
       uint64_t last_heard;
       uint64_t next_probe;

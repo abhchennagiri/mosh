@@ -138,18 +138,18 @@ Packet Connection::new_packet( Flow *flow, uint16_t flags, string &s_payload )
 
   if ( !server ) {
     unsigned int rto = ( (unsigned int)flow->SRTT + flow->idle_time ) + 4 * flow->RTTVAR;
-    unsigned int delay = MAX( rto + delay_ack_interval, MIN_PROBE_INTERVAL );
-    if ( flow->first_sent_message_since_reply <= flow->last_heard ) {
-      flow->first_sent_message_since_reply = now;
-    } else if ( rto + delay_ack_interval < now - flow->first_sent_message_since_reply ) {
-      flow->first_sent_message_since_reply = now;
+    unsigned int probe_interval = MAX( rto + delay_ack_interval, MIN_PROBE_INTERVAL );
+    if ( flow->rto < now ) {
       flow->idle_time = ( MAX_IDLE_TIME - flow->idle_time < rto ) ? MAX_IDLE_TIME : flow->idle_time + rto;
       log_dbg( LOG_DEBUG_COMMON, "Flow %hu seems idle for %dms (SRTT = %dms).\n",
 	       flow->flow_id, (int)flow->idle_time, (int)flow->SRTT );
+      flow->rto = UINT64_MAX;
     }
 
-    flow->next_probe = now + delay;
-    flow->rto = now + rto + delay_ack_interval;
+    flow->next_probe = now + probe_interval;
+    if ( flow->rto == UINT64_MAX ) {
+      flow->rto = now + rto + delay_ack_interval;
+    }
   }
 
   Packet p( flow->next_seq++, direction, timestamp16(), outgoing_timestamp_reply,
@@ -281,7 +281,6 @@ Connection::Flow::Flow( const Addr &s_src, const Addr &s_dst )
     expected_receiver_seq( defaults.expected_receiver_seq ),
     saved_timestamp( defaults.saved_timestamp ),
     saved_timestamp_received_at( defaults.saved_timestamp_received_at ),
-    first_sent_message_since_reply( defaults.first_sent_message_since_reply ),
     rto( defaults.rto ),
     last_heard( defaults.last_heard ),
     next_probe( defaults.next_probe ),
@@ -305,7 +304,6 @@ Connection::Flow::Flow( const Addr &s_src, const Addr &s_dst, uint16_t id )
     expected_receiver_seq( defaults.expected_receiver_seq ),
     saved_timestamp( defaults.saved_timestamp ),
     saved_timestamp_received_at( defaults.saved_timestamp_received_at ),
-    first_sent_message_since_reply( defaults.first_sent_message_since_reply ),
     rto( defaults.rto ),
     last_heard( defaults.last_heard ),
     next_probe( defaults.next_probe ),
@@ -594,8 +592,7 @@ void Connection::send_probes( void )
 	it != flows.end();
 	it++ ) {
     Flow *flow = it->second;
-    if ( flow != last_flow && ( flow->next_probe <= now ||
-				( flow->first_sent_message_since_reply <= flow->last_heard && flow->rto <= now ) ) ) {
+    if ( flow != last_flow && ( flow->next_probe <= now || flow->rto <= now ) ) {
       send_probe( flow );
     }
   }
@@ -1048,6 +1045,7 @@ string Connection::recv_one( int sock_to_recv )
     /* auto-adjust to remote host */
     flow_info->last_heard = last_heard = timestamp();
     flow_info->idle_time = 0;
+    flow_info->rto = UINT64_MAX;
 
     if ( server ) { /* only client can roam */
       bool has_roam = last_flow != flow_info &&
