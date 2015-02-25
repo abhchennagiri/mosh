@@ -45,7 +45,7 @@ log_msg(int level, const char *format, ...)
   for (i = 0; i < log_indent_level; i ++)
     fprintf(log_output, "  ");
   vfprintf(log_output, format, args);
-  if (level & LOG_PERROR)
+  if (level & LOG_PRINT_ERROR)
     fprintf(log_output, ": %s.\n", strerror(errno));
   fflush(log_output);
   va_end(args);

@@ -613,7 +613,7 @@ bool Connection::send_probe( Flow *flow )
 				   p.data(), p.size(), MSG_DONTWAIT, flow->src, flow->dst );
   if ( bytes_sent < 0 ) {
     flow->idle_time = MAX_IDLE_TIME;
-    log_dbg( LOG_DEBUG_COMMON | LOG_PRINT_ERROR, "failed (SRTT = %dms)", (int)flow->SRTT + flow->idle_time );
+    log_dbg( LOG_DEBUG_COMMON | LOG_PRINT_ERROR, " failed (SRTT = %dms)", (int)flow->SRTT + flow->idle_time );
   } else {
     log_dbg( LOG_DEBUG_COMMON, ": success.\n" );
   }
@@ -760,7 +760,7 @@ void Connection::send( uint16_t flags, string s )
       if ( errno == EADDRNOTAVAIL ) {
 	/* This should not append, since we just receive a message on this address ! */
       }
-      log_dbg( LOG_DEBUG_COMMON | LOG_PERROR, " failed" );
+      log_dbg( LOG_DEBUG_COMMON | LOG_PRINT_ERROR, " failed" );
     }
 
   } else if ( UNLIKELY( last_flow == NULL ) ) { /* First send. */
@@ -781,7 +781,7 @@ void Connection::send( uint16_t flags, string s )
 	} else {
 	  flow->idle_time = MAX_IDLE_TIME;
 	}
- 	log_dbg( LOG_PERROR, " failed" );
+ 	log_dbg( LOG_DEBUG_COMMON | LOG_PRINT_ERROR, " failed" );
       } else if ( bytes_sent == static_cast<ssize_t>( p.size() ) ) {
 	have_send_exception = false;
 	log_dbg( LOG_DEBUG_COMMON, ": success.\n" );
@@ -816,7 +816,7 @@ void Connection::send( uint16_t flags, string s )
 	} else {
 	  flow->idle_time = MAX_IDLE_TIME;
 	}
- 	log_dbg( LOG_PERROR, " failed" );
+ 	log_dbg( LOG_DEBUG_COMMON | LOG_PRINT_ERROR, " failed" );
       } else if ( bytes_sent == static_cast<ssize_t>( p.size() ) ){
 	have_send_exception = false;
 	if ( last_flow != flow ) {
