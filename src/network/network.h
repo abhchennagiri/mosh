@@ -148,10 +148,8 @@ namespace Network {
       double RTTVAR;
       const uint16_t flow_id;
 
-      static bool srtt_order( std::pair< uint16_t, Flow* > const &f1,
-			      std::pair< uint16_t, Flow* > const &f2 ) {
-	return (unsigned int)f1.second->SRTT + f1.second->idle_time <
-	  (unsigned int)f2.second->SRTT + f2.second->idle_time;
+      static bool srtt_order( Flow* const &f1, Flow* const &f2 ) {
+	return (unsigned int)f1->SRTT + f1->idle_time < (unsigned int)f2->SRTT + f2->idle_time;
       }
 
       Flow( const Addr &src, const Addr &dst ); /* client only */
@@ -179,7 +177,7 @@ namespace Network {
     std::deque< Socket > socks6;
     std::vector< Addr > remote_addr;
     std::vector< Addr > received_remote_addr;
-    std::map< uint16_t, Flow* > flows; /* do NEVER remove flows when server, for security reason. */
+    std::vector< Flow* > flows; /* do NEVER remove flows when server, for security reason. */
     Flow *last_flow;
     Addresses host_addresses;
 
@@ -209,6 +207,8 @@ namespace Network {
     void check_remote_addr( void );
     bool flow_exists( const Addr &src, const Addr &dst );
     void check_flows( bool remote_has_changed );
+    Flow *get_flow( uint16_t id );
+    void sort_flows( void );
 
     int sock( void ) const { assert( !socks.empty() ); return socks.back().fd(); }
     int sock6( void ) const { assert( !socks6.empty() ); return socks6.back().fd(); }

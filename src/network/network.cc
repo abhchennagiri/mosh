@@ -213,10 +213,10 @@ void Connection::check_remote_addr( void ) {
 }
 
 bool Connection::flow_exists( const Addr &src, const Addr &dst ) {
-  for ( std::map< uint16_t, Flow* >::iterator it = flows.begin();
+  for ( std::vector< Flow* >::iterator it = flows.begin();
 	it != flows.end();
 	it++ ) {
-    if ( it->second->src == src && it->second->dst == dst ) {
+    if ( (*it)->src == src && (*it)->dst == dst ) {
       return true;
     }
   }
@@ -258,7 +258,7 @@ void Connection::check_flows( bool remote_has_changed ) {
       if ( Addresses::compatible( *la_it, *ra_it ) &&
 	   ! flow_exists( *la_it, *ra_it ) ) {
 	Flow *flow_info = new Flow( *la_it, *ra_it );
-	flows[ flow_info->flow_id ] = flow_info;
+	flows.push_back( flow_info );
       }
     }
 
@@ -268,10 +268,25 @@ void Connection::check_flows( bool remote_has_changed ) {
       if ( Addresses::compatible( *la_it, *ra_it ) &&
 	   ! flow_exists( *la_it, *ra_it ) ) {
 	Flow *flow_info = new Flow( *la_it, *ra_it );
-	flows[ flow_info->flow_id ] = flow_info;
+	flows.push_back( flow_info );
       }
     }
   }
+}
+
+Connection::Flow *Connection::get_flow( uint16_t id ) {
+  for ( std::vector< Flow * >::iterator it = flows.begin();
+	it != flows.end();
+	it++ ) {
+    if ( (*it)->flow_id == id ) {
+      return *it;
+    }
+  }
+  return NULL;
+}
+
+void Connection::sort_flows( void ) {
+  std::sort( flows.begin(), flows.end(), Flow::srtt_order );
 }
 
 uint16_t Connection::Flow::next_flow_id = 0;
@@ -592,10 +607,10 @@ void Connection::send_probes( void )
 {
   assert( !server );
   uint64_t now = timestamp();
-  for ( std::map< uint16_t, Flow* >::iterator it = flows.begin();
+  for ( std::vector< Flow* >::iterator it = flows.begin();
 	it != flows.end();
 	it++ ) {
-    Flow *flow = it->second;
+    Flow *flow = *it;
     if ( flow != last_flow && ( flow->next_probe <= now || flow->rto <= now ) ) {
       send_probe( flow );
     }
@@ -768,10 +783,10 @@ void Connection::send( uint16_t flags, string s )
     }
 
   } else if ( UNLIKELY( last_flow == NULL ) ) { /* First send. */
-    for ( std::map< uint16_t, Flow* >::iterator it = flows.begin();
+    for ( std::vector< Flow* >::iterator it = flows.begin();
 	  it != flows.end();
 	  it++ ) {
-      Flow *flow = it->second;
+      Flow *flow = *it;
       Packet px = new_packet( flow, flags, s );
       string p = px.tostring( &session );
       log_dbg( LOG_DEBUG_COMMON, "Sending data on %hu seq %llu (%s -> %s, SRTT = %dms)",
@@ -796,13 +811,12 @@ void Connection::send( uint16_t flags, string s )
     }
 
   } else {
-    std::vector< std::pair< uint16_t, Flow* > > flows_vect( flows.begin(), flows.end() );
-    std::sort( flows_vect.begin(), flows_vect.end(), Flow::srtt_order );
+    sort_flows();
     bool possible_idle_send = false;
-    for ( std::vector< std::pair< uint16_t, Flow* > >::const_iterator it = flows_vect.begin();
-	  it != flows_vect.end();
+    for ( std::vector< Flow* >::const_iterator it = flows.begin();
+	  it != flows.end();
 	  it ++ ) {
-      Flow *flow = it->second;
+      Flow *flow = *it;
       if ( possible_idle_send && flow->idle_time ) {
 	/* search a reactive flow, even if slow */
 	continue;
@@ -983,14 +997,14 @@ string Connection::recv_one( int sock_to_recv )
 
   Packet p( string( msg_payload, received_len ), &session );
 
-  Flow *flow_info = flows[ p.flow_id ];
+  Flow *flow_info = get_flow( p.flow_id );
   log_dbg( LOG_DEBUG_COMMON, "timestamp = %llu\n", (long long unsigned)now );
   log_dbg( LOG_DEBUG_COMMON, "Receiving message on flow %d seq %llu (%s <- %s): ", (int) p.flow_id,
 	   (long long unsigned)p.seq, packet_local_addr.tostring().c_str(), packet_remote_addr.tostring().c_str() );
   if ( !flow_info ) {
     fatal_assert( server ); /* if client, then server answers with an unknown flow ID. This is terrific. */
     flow_info = new Flow( packet_local_addr, packet_remote_addr, p.flow_id );
-    flows[ p.flow_id ] = flow_info;
+    flows.push_back( flow_info );
   } else if ( server ) {
     /* the destination may change, especially when client hop port.  Not sure
        about the source, but anyway... */
