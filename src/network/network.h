@@ -231,7 +231,10 @@ namespace Network {
     void send( string s );
     string recv( void );
     const std::vector< int > fds( void ) const;
-    int get_MTU( void ) const { return last_flow ? last_flow->MTU : DEFAULT_SEND_MTU; }
+    int get_MTU( void ) {
+      sort_flows();
+      return flows.empty() ? DEFAULT_SEND_MTU : flows.front()->MTU;
+    }
 
     std::string port( void ) const;
     string get_key( void ) const { return key.printable_key(); }
