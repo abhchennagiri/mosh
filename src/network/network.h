@@ -82,15 +82,17 @@ namespace Network {
     Direction direction;
     uint16_t timestamp, timestamp_reply;
     uint16_t flow_id;
-    uint16_t flags;
+    uint8_t flags;
+    uint8_t loss_ratio;
     string payload;
     
     Packet( uint64_t s_seq, Direction s_direction,
 	    uint16_t s_timestamp, uint16_t s_timestamp_reply,
-	    uint16_t s_flow_id, uint16_t s_flags, string s_payload )
+	    uint16_t s_flow_id, uint8_t s_flags, uint8_t s_loss,
+	    string s_payload )
       : seq( s_seq ), direction( s_direction ),
 	timestamp( s_timestamp ), timestamp_reply( s_timestamp_reply ),
-	flow_id( s_flow_id ), flags( s_flags ), payload( s_payload )
+        flow_id( s_flow_id ), flags( s_flags ), loss_ratio( s_loss ), payload( s_payload )
     {}
     
     Packet( string coded_packet, Session *session );
@@ -120,6 +122,20 @@ namespace Network {
 
     static const int CONGESTION_TIMESTAMP_PENALTY = 500; /* ms */
 
+    class Loss {
+    public:
+      uint64_t seq_last;
+      uint64_t seq_vect;
+      uint64_t last_update;
+      uint8_t acked;
+      Loss( void )
+	: seq_last( 0), seq_vect( uint64_t(-1) ), acked( 0 )
+      {}
+      void update(uint64_t seq);
+      int get_ratio( void ); /* return integer between 0 and 100 */
+      bool is_lossy( void ); /* true if one packet is loss (or reordered) */
+    };
+
     class Flow {
     private:
       static uint16_t next_flow_id;
@@ -146,6 +162,8 @@ namespace Network {
       bool RTT_hit;
       double SRTT;
       double RTTVAR;
+      Loss incoming_loss;
+      uint8_t outgoing_loss;
       const uint16_t flow_id;
 
       static bool srtt_order( Flow* const &f1, Flow* const &f2 ) {
@@ -201,7 +219,7 @@ namespace Network {
     bool have_send_exception;
     NetworkException send_exception;
 
-    Packet new_packet( Flow *flow, uint16_t flags, string &s_payload );
+    Packet new_packet( Flow *flow, uint8_t flags, string &s_payload );
 
     void hop_port( void );
     void check_remote_addr( void );
@@ -216,7 +234,7 @@ namespace Network {
     void prune_sockets( void );
     void prune_sockets( std::deque< Socket > &socks_vect );
 
-    void send( uint16_t flags, string s );
+    void send( uint8_t flags, string s );
     void send_probes( void );
     bool send_probe( Flow *flow );
     void send_addresses( void );

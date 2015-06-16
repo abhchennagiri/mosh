@@ -92,14 +92,15 @@ Packet::Packet( string coded_packet, Session *session )
   flow_id = GET_FLOWID( message.nonce.val() );
   seq = message.nonce.val() & SEQUENCE_MASK;
 
-  dos_assert( message.text.size() >= 3 * sizeof( uint16_t ) );
+  dos_assert( message.text.size() >= 2 * sizeof( uint16_t ) + 2 * sizeof( uint8_t ) );
 
-  uint16_t *data = (uint16_t *)message.text.data();
-  timestamp = be16toh( data[ 0 ] );
-  timestamp_reply = be16toh( data[ 1 ] );
-  flags = be16toh( data[2] );
+  uint8_t *data = (uint8_t *)message.text.data();
+  timestamp = be16toh( *(uint16_t*) (data) );
+  timestamp_reply = be16toh( *(uint16_t*) ( data + 2 ) );
+  flags = data[ 4 ];
+  loss_ratio = data[ 5 ];
 
-  payload = string( message.text.begin() + 3 * sizeof( uint16_t ), message.text.end() );
+  payload = string( message.text.begin() + 2 * sizeof( uint16_t ) + 2 * sizeof( uint8_t ), message.text.end() );
 }
 
 bool Packet::is_probe( void )
@@ -119,15 +120,15 @@ string Packet::tostring( Session *session )
 
   uint16_t ts_net[ 2 ] = { static_cast<uint16_t>( htobe16( timestamp ) ),
 			   static_cast<uint16_t>( htobe16( timestamp_reply ) ) };
-  uint16_t flags_net = static_cast<uint16_t>( htobe16( flags ) );
 
   string timestamps = string( (char *)ts_net, 2 * sizeof( uint16_t ) );
-  string flags_string = string( (char *)&flags_net, sizeof( uint16_t ) );
+  string flags_string = string( (char *)&flags, sizeof( uint8_t ) );
+  string loss_string = string( (char *)&loss_ratio, sizeof( uint8_t ) );
 
-  return session->encrypt( Message( Nonce( direction_id_seq ), timestamps + flags_string + payload ) );
+  return session->encrypt( Message( Nonce( direction_id_seq ), timestamps + flags_string + loss_string + payload ) );
 }
 
-Packet Connection::new_packet( Flow *flow, uint16_t flags, string &s_payload )
+Packet Connection::new_packet( Flow *flow, uint8_t flags, string &s_payload )
 {
   uint16_t outgoing_timestamp_reply = -1;
 
@@ -157,7 +158,7 @@ Packet Connection::new_packet( Flow *flow, uint16_t flags, string &s_payload )
   }
 
   Packet p( flow->next_seq++, direction, timestamp16(), outgoing_timestamp_reply,
-	    flow->flow_id, flags, s_payload );
+	    flow->flow_id, flags, flow->incoming_loss.get_ratio(), s_payload );
 
   return p;
 }
@@ -289,6 +290,39 @@ void Connection::sort_flows( void ) {
   std::sort( flows.begin(), flows.end(), Flow::srtt_order );
 }
 
+void Connection::Loss::update(uint64_t seq)
+{
+  uint64_t now = timestamp();
+
+  if ( now - last_update >= SERVER_ASSOCIATION_TIMEOUT && seq > seq_last + 64 ) { /* TODO: perhaps a mistake */
+    /* consider a connection reset. */
+    seq_vect = uint64_t(-1);
+    last_update = now;
+    seq_last = seq;
+  } else if ( seq > seq_last ) { /* new sequence number -- recent message arrive */
+    seq_vect <<= seq - seq_last;
+    seq_vect |= 1;
+    last_update = now;
+    seq_last = seq;
+  } else if ( seq >= seq_last - 63 ) {
+    seq_vect |= ( 1 << ( seq_last - seq ) );
+  }
+}
+
+int Connection::Loss::get_ratio( void )
+{
+  int loss = 0;
+  for ( int i = 0; i < 64; i ++)
+    if ( ! ( 1 & ( seq_vect >> i ) ) )
+      loss ++;
+  return loss * 100 / 64;
+}
+
+bool Connection::Loss::is_lossy( void )
+{
+  return seq_vect != uint64_t(-1);
+}
+
 uint16_t Connection::Flow::next_flow_id = 0;
 const Connection::Flow Connection::Flow::defaults;
 
@@ -307,6 +341,8 @@ Connection::Flow::Flow( const Addr &s_src, const Addr &s_dst )
     RTT_hit( defaults.RTT_hit ),
     SRTT( defaults.SRTT ),
     RTTVAR( defaults.RTTVAR ),
+    incoming_loss(),
+    outgoing_loss( 0 ),
     flow_id( next_flow_id++ )
 {
   if ( flow_id == 0xFFFF ) {
@@ -329,6 +365,8 @@ Connection::Flow::Flow( const Addr &s_src, const Addr &s_dst, uint16_t id )
     RTT_hit( defaults.RTT_hit ),
     SRTT( defaults.SRTT ),
     RTTVAR( defaults.RTTVAR ),
+    incoming_loss(),
+    outgoing_loss( 0 ),
     flow_id( id )
 {
   assert( !next_flow_id ); /* The server should not have initialized any flow. */
@@ -750,7 +788,7 @@ void Connection::send( string s )
   send( 0, s);
 }
 
-void Connection::send( uint16_t flags, string s )
+void Connection::send( uint8_t flags, string s )
 {
   if ( server && !last_flow ) {
     return;
@@ -1014,9 +1052,12 @@ string Connection::recv_one( int sock_to_recv )
 
   dos_assert( p.direction == (server ? TO_SERVER : TO_CLIENT) ); /* prevent malicious playback to sender */
 
+  flow_info->incoming_loss.update(p.seq);
+
   if ( p.seq >= flow_info->expected_receiver_seq ) { /* don't use out-of-order packets for timestamp or targeting */
     flow_info->expected_receiver_seq = p.seq + 1; /* this is security-sensitive because a replay attack could otherwise
 						     screw up the timestamp and targeting */
+    flow_info->outgoing_loss = p.loss_ratio;
 
     if ( p.timestamp != uint16_t(-1) ) {
       flow_info->saved_timestamp = p.timestamp;
