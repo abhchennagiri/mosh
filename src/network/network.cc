@@ -855,6 +855,8 @@ void Connection::send( uint8_t flags, string s )
   } else {
     sort_flows();
     bool possible_idle_send = false;
+    int loss_ratio = 100;
+    int step = 1;
     for ( std::vector< Flow* >::const_iterator it = flows.begin();
 	  it != flows.end();
 	  it ++ ) {
@@ -865,7 +867,8 @@ void Connection::send( uint8_t flags, string s )
       }
       Packet px = new_packet( flow, flags, s );
       string p = px.tostring( &session );
-      log_dbg( LOG_DEBUG_COMMON, "Sending data on %hu seq %llu (%s -> %s, SRTT = %dms, iloss = %d%%, oloss = %d%%)",
+      log_dbg( LOG_DEBUG_COMMON, "Sending data step %d on %hu seq %llu "
+	       "(%s -> %s, SRTT = %dms, iloss = %d%%, oloss = %d%%)", step,
 	       flow->flow_id, (long long unsigned) flow->next_seq - 1, flow->src.tostring().c_str(),
 	       flow->dst.tostring().c_str(), (int)flow->SRTT,
 	       (int)flow->incoming_loss.get_ratio(), (int)flow->outgoing_loss );
@@ -880,20 +883,25 @@ void Connection::send( uint8_t flags, string s )
  	log_dbg( LOG_DEBUG_COMMON | LOG_PRINT_ERROR, " failed" );
       } else if ( bytes_sent == static_cast<ssize_t>( p.size() ) ){
 	have_send_exception = false;
-	if ( last_flow != flow ) {
-	  log_dbg( LOG_DEBUG_COMMON, ": switching from %hu.\n", last_flow->flow_id );
+	if ( last_flow != flow && step == 1 ) {
+	  log_dbg( LOG_DEBUG_COMMON, ": switching from %hu", last_flow->flow_id );
 	  last_flow = flow;
 	} else {
-	  log_dbg( LOG_DEBUG_COMMON, ": success.\n" );
+	  log_dbg( LOG_DEBUG_COMMON, ": success" );
 	}
+
+	loss_ratio = ( loss_ratio * flow->outgoing_loss ) / 100;
+	log_dbg( LOG_DEBUG_COMMON, " with loss-ratio %d.\n", loss_ratio );
+
 	if ( flow->idle_time ) {
 	  possible_idle_send = true;
-	} else {
+	} else if ( loss_ratio == 0 ) {
 	  break;
 	}
       } else {
 	log_dbg( LOG_DEBUG_COMMON, ": failed (partial).\n" );
       }
+      step++;
     }
 
     send_probes();
