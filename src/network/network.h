@@ -167,7 +167,9 @@ namespace Network {
       const uint16_t flow_id;
 
       static bool srtt_order( Flow* const &f1, Flow* const &f2 ) {
-	return (unsigned int)f1->SRTT + f1->idle_time < (unsigned int)f2->SRTT + f2->idle_time;
+	unsigned int srtt1 = (unsigned int) f1->SRTT + f1->idle_time;
+	unsigned int srtt2 = (unsigned int) f2->SRTT + f2->idle_time;
+	return ( srtt1 < srtt2 ) || ( ( srtt1 == srtt2) && f1->outgoing_loss < f2->outgoing_loss );
       }
 
       Flow( const Addr &src, const Addr &dst ); /* client only */
