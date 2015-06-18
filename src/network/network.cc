@@ -867,8 +867,8 @@ void Connection::send( uint8_t flags, string s )
       }
       Packet px = new_packet( flow, flags, s );
       string p = px.tostring( &session );
-      log_dbg( LOG_DEBUG_COMMON, "Sending data step %d on %hu seq %llu "
-	       "(%s -> %s, SRTT = %dms, iloss = %d%%, oloss = %d%%)", step,
+      log_dbg( LOG_DEBUG_COMMON, "Sending data length %d step %d on %hu seq %llu "
+	       "(%s -> %s, SRTT = %dms, iloss = %d%%, oloss = %d%%)", (int) p.size(), step,
 	       flow->flow_id, (long long unsigned) flow->next_seq - 1, flow->src.tostring().c_str(),
 	       flow->dst.tostring().c_str(), (int)flow->SRTT,
 	       (int)flow->incoming_loss.get_ratio(), (int)flow->outgoing_loss );
@@ -1050,7 +1050,8 @@ string Connection::recv_one( int sock_to_recv )
 
   Flow *flow_info = get_flow( p.flow_id );
   log_dbg( LOG_DEBUG_COMMON, "timestamp = %llu\n", (long long unsigned)now );
-  log_dbg( LOG_DEBUG_COMMON, "Receiving message on flow %d seq %llu (%s <- %s): ", (int) p.flow_id,
+  log_dbg( LOG_DEBUG_COMMON, "Receiving message length %d on flow %d seq %llu (%s <- %s): ",
+	   (int) received_len, (int) p.flow_id,
 	   (long long unsigned)p.seq, packet_local_addr.tostring().c_str(), packet_remote_addr.tostring().c_str() );
   if ( !flow_info ) {
     fatal_assert( server ); /* if client, then server answers with an unknown flow ID. This is terrific. */
