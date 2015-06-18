@@ -77,7 +77,7 @@ static void usage( const char *argv0 ) {
   fprintf( stderr, "License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.\nThis is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.\n\n" );
 
   fprintf( stderr,
-	   "Usage: %s [-f <logfile>] [-d <debug-level>] [-w] IP PORT\n"
+	   "Usage: %s [-f <logfile>] [-d <debug-level>] [-m <loss-tolerance>] [-w] IP PORT\n"
 	   "       %s -c\n", argv0, argv0 );
 }
 
@@ -102,6 +102,8 @@ int mosh_main( int argc, char *argv[] )
 int main( int argc, char *argv[] )
 #endif
 {
+  int loss_ratio_tolerance = 0;
+
   /* For security, make sure we don't dump core */
   Crypto::disable_dumping_core();
 
@@ -110,7 +112,7 @@ int main( int argc, char *argv[] )
 
   /* Get arguments */
   int opt;
-  while ( (opt = getopt( argc, argv, "cwd:f:" )) != -1 ) {
+  while ( (opt = getopt( argc, argv, "cwd:f:m:" )) != -1 ) {
     switch ( opt ) {
     case 'c':
       print_colorcount();
@@ -133,6 +135,9 @@ int main( int argc, char *argv[] )
         log_output = stderr;
       }
       break;
+      case 'm':
+	loss_ratio_tolerance = atoi( optarg );
+	break;
     default:
       usage( argv[ 0 ] );
       exit( 1 );
@@ -184,7 +189,7 @@ int main( int argc, char *argv[] )
   set_native_locale();
 
   try {
-    STMClient client( ip, desired_port, key, predict_mode );
+    STMClient client( ip, desired_port, key, predict_mode, loss_ratio_tolerance );
     client.init();
 
     try {

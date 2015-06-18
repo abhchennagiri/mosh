@@ -98,14 +98,14 @@ static void serve( int host_fd,
 
 static int run_server( const char *desired_ip, const char *desired_port,
 		       const string &command_path, char *command_argv[],
-		       const int colors, bool verbose, bool with_motd, bool detach );
+		       const int colors, bool verbose, bool with_motd, bool detach, int loss_ratio_tolerance );
 
 using namespace std;
 
 static void print_usage( const char *argv0 )
 {
   fprintf( stderr, "Usage: %s new [-s] [-v] [-i LOCALADDR] [-p PORT[:PORT2]] [-c COLORS] [-l NAME=VALUE] [-a] "
-           "[-f <logfile>] [-d <debug-level>] [-- COMMAND...]\n", argv0 );
+           "[-f <logfile>] [-d <debug-level>] [-m <loss-tolerance>] [-- COMMAND...]\n", argv0 );
 }
 
 static void print_motd( void );
@@ -172,6 +172,7 @@ int main( int argc, char *argv[] )
   /* Will cause mosh-server not to correctly detach on old versions of sshd. */
   list<string> locale_vars;
   bool detach = true;
+  int loss_ratio_tolerance = 0;
 
   /* strip off command */
   for ( int i = 0; i < argc; i++ ) {
@@ -189,7 +190,7 @@ int main( int argc, char *argv[] )
        && (strcmp( argv[ 1 ], "new" ) == 0) ) {
     /* new option syntax */
     int opt;
-    while ( (opt = getopt( argc - 1, argv + 1, "ai:p:c:svl:d:f:" )) != -1 ) {
+    while ( (opt = getopt( argc - 1, argv + 1, "ai:p:c:svl:d:f:m:" )) != -1 ) {
       switch ( opt ) {
       case 'a':
 	detach = false;
@@ -232,6 +233,9 @@ int main( int argc, char *argv[] )
           log_output = stderr;
         }
         break;
+      case 'm':
+	loss_ratio_tolerance = atoi( optarg );
+	break;
       default:
 	print_usage( argv[ 0 ] );
 	/* don't die on unknown options */
@@ -337,7 +341,8 @@ int main( int argc, char *argv[] )
   }
 
   try {
-    return run_server( desired_ip, desired_port, command_path, command_argv, colors, verbose, with_motd, detach );
+    return run_server( desired_ip, desired_port, command_path, command_argv, colors, verbose, with_motd, detach,
+		       loss_ratio_tolerance );
   } catch ( const Network::NetworkException &e ) {
     fprintf( stderr, "Network exception: %s\n",
 	     e.what() );
@@ -351,7 +356,7 @@ int main( int argc, char *argv[] )
 
 static int run_server( const char *desired_ip, const char *desired_port,
 		       const string &command_path, char *command_argv[],
-		       const int colors, bool verbose, bool with_motd, bool detach ) {
+		       const int colors, bool verbose, bool with_motd, bool detach, int loss_ratio_tolerance ) {
   /* get initial window size */
   struct winsize window_size;
   if ( ioctl( STDIN_FILENO, TIOCGWINSZ, &window_size ) < 0 ||
@@ -371,7 +376,7 @@ static int run_server( const char *desired_ip, const char *desired_port,
 
   /* open network */
   Network::UserStream blank;
-  ServerConnection *network = new ServerConnection( terminal, blank, desired_ip, desired_port );
+  ServerConnection *network = new ServerConnection( terminal, blank, desired_ip, desired_port, loss_ratio_tolerance );
 
   if ( verbose ) {
     network->set_verbose();

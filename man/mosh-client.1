@@ -24,6 +24,7 @@ IP PORT
 [\-w]
 [\-f \fILOGFILE\fP]
 [\-d \fIDEBUG-LEVEL\fP]
+[\-m \fILOSS-TOLERANCE\fP]
 .br
 .B mosh-client 
 \-c
@@ -59,6 +60,11 @@ attach a gdb session.
 The \-f option specify the log file, and the \-d option the debug
 level.  There is two debug level: \fBerror\fP and \fBdebug\fP.  By
 default, there is no log output.
+
+The \-m option specify the loss ratio tolerance: packets sent will be duplicate
+on each different path until the product of the loss ratio of the used paths is
+less than the tolerance (or no more different paths are available).  The default
+is 0.
 
 .SH ENVIRONMENT VARIABLES
 

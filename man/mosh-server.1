@@ -27,6 +27,7 @@ new
 [\-c \fICOLORS\fP]
 [\-f \fILOGFILE\fP]
 [\-d \fIDEBUG-LEVEL\fP]
+[\-m \fILOSS-TOLERANCE\fP]
 [\-\- command...]
 .br
 .SH DESCRIPTION
@@ -96,6 +97,13 @@ Specify the log file.  By default, there is no log output.
 .B \-d \fIDEBUG-LEVEL\fP
 Specify the debug level: either \fBerror\fP or \fBdebug\fP.  By default, there
 is no log output.
+
+.TP
+.B \-m \fILOSS-RATIO-TOLERANCE\fP
+This option control the packet duplication algorithm: packets sent will be
+duplicate on each different path until the product of the loss ratio of the used
+paths is less than the tolerance (or no more different paths are available).
+The default is 0.
 
 .SH EXAMPLE
 

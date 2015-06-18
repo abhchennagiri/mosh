@@ -483,7 +483,8 @@ private:
   AddrInfo &operator=(const AddrInfo &);
 };
 
-Connection::Connection( uint16_t delay_ack, const char *desired_ip, const char *desired_port ) /* server */
+Connection::Connection( uint16_t delay_ack, const char *desired_ip, const char *desired_port,
+			int loss_ratio_tolerance ) /* server */
   : socks(),
     socks6(),
     remote_addr(),
@@ -492,6 +493,7 @@ Connection::Connection( uint16_t delay_ack, const char *desired_ip, const char *
     last_flow( NULL ),
     host_addresses(),
     server( true ),
+    loss_ratio_tolerance( loss_ratio_tolerance ),
     key(),
     session( key ),
     direction( TO_CLIENT ),
@@ -590,7 +592,8 @@ bool Connection::Socket::try_bind( int sock, Addr local_addr, int port_low, int 
   return false;
 }
 
-Connection::Connection( uint16_t delay_ack, const char *key_str, const char *ip, const char *port ) /* client */
+Connection::Connection( uint16_t delay_ack, const char *key_str, const char *ip, const char *port,
+			int loss_ratio_tolerance ) /* client */
   : socks(),
     socks6(),
     remote_addr(),
@@ -599,6 +602,7 @@ Connection::Connection( uint16_t delay_ack, const char *key_str, const char *ip,
     last_flow( NULL ),
     host_addresses(),
     server( false ),
+    loss_ratio_tolerance( loss_ratio_tolerance ),
     key( key_str ),
     session( key ),
     direction( TO_SERVER ),
@@ -895,7 +899,7 @@ void Connection::send( uint8_t flags, string s )
 
 	if ( flow->idle_time ) {
 	  possible_idle_send = true;
-	} else if ( loss_ratio == 0 ) {
+	} else if ( loss_ratio <= loss_ratio_tolerance ) {
 	  break;
 	}
       } else {

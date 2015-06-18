@@ -202,6 +202,7 @@ namespace Network {
     Addresses host_addresses;
 
     bool server;
+    int loss_ratio_tolerance;
 
     Base64Key key;
     Session session;
@@ -245,8 +246,10 @@ namespace Network {
     void parse_received_addresses( string payload );
 
   public:
-    Connection( uint16_t delay_ack, const char *desired_ip, const char *desired_port ); /* server */
-    Connection( uint16_t delay_ack, const char *key_str, const char *ip, const char *port ); /* client */
+    Connection( uint16_t delay_ack, const char *desired_ip, const char *desired_port,
+		int loss_ratio_tolerance ); /* server */
+    Connection( uint16_t delay_ack, const char *key_str, const char *ip, const char *port,
+		int loss_ratio_tolerance ); /* client */
 
     void send( string s );
     string recv( void );
