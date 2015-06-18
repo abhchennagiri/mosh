@@ -1153,7 +1153,6 @@ string Connection::recv_one( int sock_to_recv )
   if ( p.is_addr_msg() ) {
     if ( server ) {
       send_addresses();
-      assert( p.payload.empty() );
     } else {
       parse_received_addresses( p.payload );
       check_flows( true );
