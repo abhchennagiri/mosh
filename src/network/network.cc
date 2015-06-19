@@ -250,8 +250,10 @@ void Connection::check_flows( bool remote_has_changed ) {
       continue;
     }
 
-    if ( la_it->is_linklocal() ) {
-      continue; /* I don't want to search interfaces to bind for... let the system do the trick. */
+    if ( la_it->is_linklocal() || la_it->is_any() ) {
+      /* The linklocal stuff is todo: we must deal with the scope, but it should
+	 not be very difficult. */
+      continue;
     }
 
     for ( std::vector< Addr >::const_iterator ra_it = remote_addr.begin();
