@@ -146,9 +146,8 @@ Packet Connection::new_packet( Flow *flow, uint8_t flags, string &s_payload )
     unsigned int probe_interval = MAX( rto + delay_ack_interval, MIN_PROBE_INTERVAL );
     if ( flow->rto < now ) {
       flow->idle_time = ( MAX_IDLE_TIME - flow->idle_time < rto ) ? MAX_IDLE_TIME : flow->idle_time + rto;
-      log_dbg( LOG_DEBUG_COMMON, "Flow %hu seems idle for %dms (SRTT = %dms, iloss = %d%%, oloss = %d%%).\n",
-	       flow->flow_id, (int)flow->idle_time, (int)flow->SRTT,
-	       (int)flow->incoming_loss.get_ratio(), (int)flow->outgoing_loss );
+      log_dbg( LOG_DEBUG_COMMON, "report flow %hu srtt %dms idle %dms\n",
+	       flow->flow_id, (int)flow->SRTT, (int)flow->idle_time );
       flow->rto = uint64_t(-1);
     }
 
@@ -669,18 +668,19 @@ bool Connection::send_probe( Flow *flow )
 
   string p = px.tostring( &session );
 
-  log_dbg( LOG_DEBUG_COMMON, "Sending probe on %d seq %llu (%s -> %s, SRTT = %dms, iloss = %d%%, oloss = %d%%)",
-	   (int)flow->flow_id, (long long unsigned)flow->next_seq - 1,
-	   flow->src.tostring().c_str(), flow->dst.tostring().c_str(), (int)flow->SRTT,
+  log_dbg( LOG_DEBUG_COMMON, "sending probe len %d flow %hu seq %llu local %s remote %s srtt %dms idle %dms iloss %d%% oloss %d%%",
+	   (int)p.size(),
+	   flow->flow_id, (long long unsigned)flow->next_seq - 1,
+	   flow->src.tostring().c_str(), flow->dst.tostring().c_str(), (int)flow->SRTT, (int)flow->idle_time,
 	   (int)flow->incoming_loss.get_ratio(), (int)flow->outgoing_loss );
 
   ssize_t bytes_sent = sendfromto( flow->dst.sa.sa_family == AF_INET ? sock() : sock6(),
 				   p.data(), p.size(), MSG_DONTWAIT, flow->src, flow->dst );
   if ( bytes_sent < 0 ) {
     flow->idle_time = MAX_IDLE_TIME;
-    log_dbg( LOG_DEBUG_COMMON | LOG_PRINT_ERROR, " failed (SRTT = %dms)", (int)flow->SRTT + flow->idle_time );
+    log_dbg( LOG_DEBUG_COMMON | LOG_PRINT_ERROR, " failed" );
   } else {
-    log_dbg( LOG_DEBUG_COMMON, ": success.\n" );
+    log_dbg( LOG_DEBUG_COMMON, " success\n" );
   }
 
   return ( bytes_sent != static_cast<ssize_t>( p.size() ) );
@@ -804,7 +804,7 @@ void Connection::send( uint8_t flags, string s )
 
   have_send_exception = true;
 
-  log_dbg( LOG_DEBUG_COMMON, "timestamp = %llu\n", (long long unsigned)timestamp() );
+  log_dbg( LOG_DEBUG_COMMON, "timestamp %llu\n", (long long unsigned)timestamp() );
 
   ssize_t bytes_sent = -1;
   if ( server ) {
@@ -812,15 +812,17 @@ void Connection::send( uint8_t flags, string s )
 
     string p = px.tostring( &session );
 
-    log_dbg( LOG_DEBUG_COMMON, "Sending data on %hu seq %llu (%s -> %s, SRTT = %dms, iloss = %d%%, oloss = %d%%)",
+    log_dbg( LOG_DEBUG_COMMON, "sending data len %d try 1 flow %hu seq %llu local %s remote %s "
+	     "srtt %dms idle %dms iloss %d%% oloss %d%% loss-ratio -1",
+	     (int)p.size(),
 	     last_flow->flow_id, (long long unsigned) last_flow->next_seq - 1, last_flow->src.tostring().c_str(),
-	     last_flow->dst.tostring().c_str(), (int)last_flow->SRTT,
+	     last_flow->dst.tostring().c_str(), (int)last_flow->SRTT, (int)last_flow->idle_time,
 	     (int)last_flow->incoming_loss.get_ratio(), (int)last_flow->outgoing_loss );
 
     bytes_sent = sendfromto( last_flow->dst.sa.sa_family == AF_INET ? sock() : sock6(),
 			     p.data(), p.size(), MSG_DONTWAIT, last_flow->src, last_flow->dst );
     if ( bytes_sent == static_cast<ssize_t>( p.size() ) ) {
-      log_dbg( LOG_DEBUG_COMMON, ": success\n" );
+      log_dbg( LOG_DEBUG_COMMON, " success\n" );
       have_send_exception = false;
     } else {
       if ( errno == EADDRNOTAVAIL ) {
@@ -836,9 +838,11 @@ void Connection::send( uint8_t flags, string s )
       Flow *flow = *it;
       Packet px = new_packet( flow, flags, s );
       string p = px.tostring( &session );
-      log_dbg( LOG_DEBUG_COMMON, "Sending data on %hu seq %llu (%s -> %s, SRTT = %dms, iloss = %d%%, oloss = %d%%)",
+      log_dbg( LOG_DEBUG_COMMON, "sending data len %d try 1 flow %hu seq %llu local %s remote %s "
+	       "srtt %dms idle %dms iloss %d%% oloss %d%%",
+	       (int)p.size(),
 	       flow->flow_id, (long long unsigned) flow->next_seq - 1, flow->src.tostring().c_str(),
-	       flow->dst.tostring().c_str(), (int)flow->SRTT,
+	       flow->dst.tostring().c_str(), (int)flow->SRTT, (int)flow->idle_time,
 	       (int)flow->incoming_loss.get_ratio(), (int)flow->outgoing_loss );
       bytes_sent = sendfromto( flow->dst.sa.sa_family == AF_INET ? sock() : sock6(),
 			       p.data(), p.size(), MSG_DONTWAIT, flow->src, flow->dst );
@@ -851,10 +855,10 @@ void Connection::send( uint8_t flags, string s )
  	log_dbg( LOG_DEBUG_COMMON | LOG_PRINT_ERROR, " failed" );
       } else if ( bytes_sent == static_cast<ssize_t>( p.size() ) ) {
 	have_send_exception = false;
-	log_dbg( LOG_DEBUG_COMMON, ": success.\n" );
+	log_dbg( LOG_DEBUG_COMMON, " success\n" );
 	last_flow = flow;
       } else {
-	log_dbg( LOG_DEBUG_COMMON, ": failed (partial).\n" );
+	log_dbg( LOG_DEBUG_COMMON, " failed (partial)\n" );
       }
     }
 
@@ -873,10 +877,10 @@ void Connection::send( uint8_t flags, string s )
       }
       Packet px = new_packet( flow, flags, s );
       string p = px.tostring( &session );
-      log_dbg( LOG_DEBUG_COMMON, "Sending data length %d step %d on %hu seq %llu "
-	       "(%s -> %s, SRTT = %dms, iloss = %d%%, oloss = %d%%)", (int) p.size(), step,
+      log_dbg( LOG_DEBUG_COMMON, "sending data len %d try %d flow %hu seq %llu local %s remote %s "
+	       "srtt %dms idle %dms iloss %d%% oloss %d%%", (int) p.size(), step,
 	       flow->flow_id, (long long unsigned) flow->next_seq - 1, flow->src.tostring().c_str(),
-	       flow->dst.tostring().c_str(), (int)flow->SRTT,
+	       flow->dst.tostring().c_str(), (int)flow->SRTT, (int)flow->idle_time,
 	       (int)flow->incoming_loss.get_ratio(), (int)flow->outgoing_loss );
       bytes_sent = sendfromto( flow->dst.sa.sa_family == AF_INET ? sock() : sock6(),
 			       p.data(), p.size(), MSG_DONTWAIT, flow->src, flow->dst );
@@ -890,14 +894,14 @@ void Connection::send( uint8_t flags, string s )
       } else if ( bytes_sent == static_cast<ssize_t>( p.size() ) ){
 	have_send_exception = false;
 	if ( last_flow != flow && step == 1 ) {
-	  log_dbg( LOG_DEBUG_COMMON, ": switching from %hu", last_flow->flow_id );
+	  log_dbg( LOG_DEBUG_COMMON, " switching" );
 	  last_flow = flow;
 	} else {
-	  log_dbg( LOG_DEBUG_COMMON, ": success" );
+	  log_dbg( LOG_DEBUG_COMMON, " success" );
 	}
 
 	loss_ratio = ( loss_ratio * flow->outgoing_loss ) / 100;
-	log_dbg( LOG_DEBUG_COMMON, " with loss-ratio %d.\n", loss_ratio );
+	log_dbg( LOG_DEBUG_COMMON, " loss-ratio %d\n", loss_ratio );
 
 	if ( flow->idle_time ) {
 	  possible_idle_send = true;
@@ -905,7 +909,7 @@ void Connection::send( uint8_t flags, string s )
 	  break;
 	}
       } else {
-	log_dbg( LOG_DEBUG_COMMON, ": failed (partial).\n" );
+	log_dbg( LOG_DEBUG_COMMON, " failed (partial)\n" );
       }
       step++;
     }
@@ -1055,10 +1059,11 @@ string Connection::recv_one( int sock_to_recv )
   Packet p( string( msg_payload, received_len ), &session );
 
   Flow *flow_info = get_flow( p.flow_id );
-  log_dbg( LOG_DEBUG_COMMON, "timestamp = %llu\n", (long long unsigned)now );
-  log_dbg( LOG_DEBUG_COMMON, "Receiving message length %d on flow %d seq %llu (%s <- %s): ",
-	   (int) received_len, (int) p.flow_id,
+  log_dbg( LOG_DEBUG_COMMON, "timestamp %llu\n", (long long unsigned)now );
+  log_dbg( LOG_DEBUG_COMMON, "receiving %s length %d flow %d seq %llu local %s remote %s ",
+	   p.is_probe() ? "probe" : "data", (int)received_len, (int)p.flow_id,
 	   (long long unsigned)p.seq, packet_local_addr.tostring().c_str(), packet_remote_addr.tostring().c_str() );
+
   if ( !flow_info ) {
     fatal_assert( server ); /* if client, then server answers with an unknown flow ID. This is terrific. */
     flow_info = new Flow( packet_local_addr, packet_remote_addr, p.flow_id );
@@ -1093,12 +1098,6 @@ string Connection::recv_one( int sock_to_recv )
       }
     }
 
-    if ( p.is_probe() ) {
-      log_dbg( LOG_DEBUG_COMMON, "probe, " );
-    } else {
-      log_dbg( LOG_DEBUG_COMMON, "data, " );
-    }
-
     if ( p.timestamp_reply != uint16_t(-1) ) {
       uint16_t now = timestamp16();
       double R = timestamp_diff( now, p.timestamp_reply );
@@ -1116,12 +1115,12 @@ string Connection::recv_one( int sock_to_recv )
 	  flow_info->SRTT = (1 - alpha) * flow_info->SRTT + ( alpha * R );
 	}
       }
-      log_dbg( LOG_DEBUG_COMMON, "RTT = %ums, SRTT = %ums", (unsigned int)R, (unsigned int)flow_info->SRTT );
+      log_dbg( LOG_DEBUG_COMMON, "rtt %ums srtt %ums", (unsigned int)R, (unsigned int)flow_info->SRTT );
     } else {
-      log_dbg( LOG_DEBUG_COMMON, "no timestamp reply" );
+      log_dbg( LOG_DEBUG_COMMON, "rtt NA srtt %ums", (unsigned int)flow_info->SRTT );
     }
 
-    log_dbg( LOG_DEBUG_COMMON, ", iloss = %d%%, oloss = %d%%.\n",
+    log_dbg( LOG_DEBUG_COMMON, " iloss %d%% oloss %d%%\n",
 	     (int)flow_info->incoming_loss.get_ratio(), (int)flow_info->outgoing_loss );
 
     /* auto-adjust to remote host */
@@ -1154,7 +1153,7 @@ string Connection::recv_one( int sock_to_recv )
       }
     }
   } else {
-    log_dbg( LOG_DEBUG_COMMON, "out-of-order.\n" );
+    log_dbg( LOG_DEBUG_COMMON, "out-of-order\n" );
   }
 
   if ( p.is_addr_msg() ) {
