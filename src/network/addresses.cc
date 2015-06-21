@@ -114,5 +114,5 @@ int Addresses::get_fd( void )
 bool Addresses::compatible( const Addr &src, const Addr &dst ) {
   return src.sa.sa_family == dst.sa.sa_family &&
     src.is_loopback() == dst.is_loopback() &&
-    ( !dst.is_linklocal() || src.is_any() );
+    dst.is_linklocal() == src.is_linklocal();
 }

@@ -95,7 +95,10 @@ namespace Network {
 	return memcmp( &sin.sin_addr, &a2.sin.sin_addr, 4 );
       }
       if ( sa.sa_family == AF_INET6 ) {
-	return memcmp( &sin6.sin6_addr, &a2.sin6.sin6_addr, 16 );
+	int cmp = memcmp( &sin6.sin6_addr, &a2.sin6.sin6_addr, 16 );
+	if ( cmp == 0 && is_linklocal() )
+	  return sin6.sin6_scope_id - a2.sin6.sin6_scope_id;
+	return cmp;
       }
       return memcmp( &ss, &a2.ss, sizeof( ss ) );
     }

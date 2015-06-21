@@ -224,6 +224,18 @@ bool Connection::flow_exists( const Addr &src, const Addr &dst ) {
   return false;
 }
 
+void Connection::new_flow( Addr &src, Addr &dst ) {
+  if ( Addresses::compatible( src, dst ) ) {
+    if ( dst.is_linklocal() ) {
+      dst.sin6.sin6_scope_id = src.sin6.sin6_scope_id;
+    }
+    if ( ! flow_exists( src, dst ) ) {
+      Flow *flow_info = new Flow( src, dst );
+      flows.push_back( flow_info );
+    }
+  }
+}
+
 /* Add new flows, if needed. */
 void Connection::check_flows( bool remote_has_changed ) {
   assert( !server );
@@ -249,30 +261,22 @@ void Connection::check_flows( bool remote_has_changed ) {
       continue;
     }
 
-    if ( la_it->is_linklocal() || la_it->is_any() ) {
-      /* The linklocal stuff is todo: we must deal with the scope, but it should
-	 not be very difficult. */
+    if ( la_it->is_any() ) {
+      /* We control everything.  In practice, using "ANY" addresses just
+	 duplicate flows, but didn't give us more flexibility. */
       continue;
     }
 
-    for ( std::vector< Addr >::const_iterator ra_it = remote_addr.begin();
+    for ( std::vector< Addr >::iterator ra_it = remote_addr.begin();
 	  ra_it != remote_addr.end();
 	  ra_it++ ) {
-      if ( Addresses::compatible( *la_it, *ra_it ) &&
-	   ! flow_exists( *la_it, *ra_it ) ) {
-	Flow *flow_info = new Flow( *la_it, *ra_it );
-	flows.push_back( flow_info );
-      }
+      new_flow( *la_it, *ra_it );
     }
 
-    for ( std::vector< Addr >::const_iterator ra_it = received_remote_addr.begin();
+    for ( std::vector< Addr >::iterator ra_it = received_remote_addr.begin();
 	  ra_it != received_remote_addr.end();
 	  ra_it++ ) {
-      if ( Addresses::compatible( *la_it, *ra_it ) &&
-	   ! flow_exists( *la_it, *ra_it ) ) {
-	Flow *flow_info = new Flow( *la_it, *ra_it );
-	flows.push_back( flow_info );
-      }
+      new_flow( *la_it, *ra_it );
     }
   }
 }

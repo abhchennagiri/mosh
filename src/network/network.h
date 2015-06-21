@@ -227,6 +227,7 @@ namespace Network {
     void hop_port( void );
     void check_remote_addr( void );
     bool flow_exists( const Addr &src, const Addr &dst );
+    void new_flow( Addr &src, Addr &dst );
     void check_flows( bool remote_has_changed );
     Flow *get_flow( uint16_t id );
     void sort_flows( void );
