@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.61])
-AC_INIT([mosh], [1.2.4a], [mosh-devel@mit.edu])
+AC_INIT([mosh], [1.2.4.95rc2], [mosh-devel@mit.edu])
 AM_INIT_AUTOMAKE([foreign -Wall -Werror])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AC_CONFIG_SRCDIR([src/frontend/mosh-client.cc])
@@ -33,11 +33,11 @@ AC_ARG_ENABLE([compile-warnings],
        ;;
      maximum)
        WARNING_CXXFLAGS="-Wall"
-       PICKY_CXXFLAGS="-Wextra -pedantic -Wno-long-long -Weffc++"
+       PICKY_CXXFLAGS="-Wextra -pedantic -Wno-long-long -Weffc++ -Wmissing-declarations"
        ;;
      error)
        WARNING_CXXFLAGS="-Wall -Werror"
-       PICKY_CXXFLAGS="-Wextra -pedantic -Wno-long-long -Weffc++"
+       PICKY_CXXFLAGS="-Wextra -pedantic -Wno-long-long -Weffc++ -Wmissing-declarations"
        ;;
      *)
        AC_MSG_ERROR([Unknown argument '$enableval' to --enable-compile-warnings])
@@ -170,7 +170,7 @@ AC_SEARCH_LIBS([socket], [socket])
 AC_SEARCH_LIBS([inet_addr], [nsl])
 
 # Checks for header files.
-AC_CHECK_HEADERS([m4_normalize([
+AC_CHECK_HEADERS(m4_normalize([
   fcntl.h
   langinfo.h
   limits.h
@@ -191,7 +191,7 @@ AC_CHECK_HEADERS([m4_normalize([
   unistd.h
   wchar.h
   wctype.h
-  ])], [], [AC_MSG_ERROR([Missing required header file.])])
+  ]), [], [AC_MSG_ERROR([Missing required header file.])])
 
 AC_CHECK_HEADERS([pty.h util.h libutil.h paths.h])
 AC_CHECK_HEADERS([endian.h sys/endian.h])
@@ -216,7 +216,7 @@ AC_TYPE_UINTPTR_T
 # Checks for library functions.
 AC_FUNC_FORK
 AC_FUNC_MBRTOWC
-AC_CHECK_FUNCS([m4_normalize([
+AC_CHECK_FUNCS(m4_normalize([
   gettimeofday
   setrlimit
   iswprint
@@ -239,7 +239,7 @@ AC_CHECK_FUNCS([m4_normalize([
   pselect
   getaddrinfo
   getnameinfo
-  ])])
+  ]))
 
 AC_SEARCH_LIBS([clock_gettime], [rt], [AC_DEFINE([HAVE_CLOCK_GETTIME], [1], [Define if clock_gettime is available.])])
 
@@ -373,6 +373,17 @@ AC_CHECK_DECL([IUTF8],
 
 # Checks for protobuf
 PKG_CHECK_MODULES([protobuf], [protobuf])
+
+# Bash completion needs to ask where it goes if >= 2.0 is installed.
+AS_IF([test "$install_completion" != no],
+  [PKG_CHECK_MODULES([BASH_COMPLETION], [bash-completion >= 2.0],
+     [if test "$prefix" = "NONE"; then
+        completions="`pkg-config --variable=completionsdir bash-completion`"
+      else
+        completions="`pkg-config --define-variable=prefix=$prefix --variable=completionsdir bash-completion`"
+      fi],
+     [completions="${sysconfdir}/bash_completion.d"])
+   AC_SUBST([completions])])
 
 AC_CONFIG_FILES([
   Makefile

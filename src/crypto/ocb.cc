@@ -185,7 +185,7 @@
 		bl = _mm_slli_epi32(bl, 1);
 		return _mm_xor_si128(bl,tmp);
 	}
-#elif __ALTIVEC__
+#elif __ALTIVEC__ && _CALL_ELF != 2
     #include <altivec.h>
     typedef vector unsigned block;
     #define xor_block(x,y)         vec_xor(x,y)
@@ -193,7 +193,7 @@
     #define unequal_blocks(x,y)    vec_any_ne(x,y)
     #define swap_if_le(b)          (b)
 	#if __PPC64__
-	block gen_offset(uint64_t KtopStr[3], unsigned bot) {
+	static block gen_offset(uint64_t KtopStr[3], unsigned bot) {
 		union {uint64_t u64[2]; block bl;} rval;
 		rval.u64[0] = (KtopStr[0] << bot) | (KtopStr[1] >> (64-bot));
 		rval.u64[1] = (KtopStr[1] << bot) | (KtopStr[2] >> (64-bot));
@@ -201,7 +201,7 @@
 	}
 	#else
 	/* Special handling: Shifts are mod 32, and no 64-bit types */
-	block gen_offset(uint64_t KtopStr[3], unsigned bot) {
+	static block gen_offset(uint64_t KtopStr[3], unsigned bot) {
 		const vector unsigned k32 = {32,32,32,32};
 		vector unsigned hi = *(vector unsigned *)(KtopStr+0);
 		vector unsigned lo = *(vector unsigned *)(KtopStr+2);
@@ -246,7 +246,7 @@
     }
     #define swap_if_le(b)          (b)  /* Using endian-neutral int8x16_t */
 	/* KtopStr is reg correct by 64 bits, return mem correct */
-	block gen_offset(uint64_t KtopStr[3], unsigned bot) {
+	static block gen_offset(uint64_t KtopStr[3], unsigned bot) {
 		const union { unsigned x; unsigned char endian; } little = { 1 };
 		const int64x2_t k64 = {-64,-64};
 		uint64x2_t hi = *(uint64x2_t *)(KtopStr+0);   /* hi = A B */
@@ -260,7 +260,7 @@
 	}
 	static inline block double_block(block b)
 	{
-		const block mask = {135,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
+		const block mask = {-121,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
 		block tmp = vshrq_n_s8(b,7);
 		tmp = vandq_s8(tmp, mask);
 		tmp = vextq_s8(tmp, tmp, 1);  /* Rotate high byte to end */
@@ -286,7 +286,7 @@
     }
 
 	/* KtopStr is reg correct by 64 bits, return mem correct */
-	block gen_offset(uint64_t KtopStr[3], unsigned bot) {
+	static block gen_offset(uint64_t KtopStr[3], unsigned bot) {
         block rval;
         if (bot != 0) {
 			rval.l = (KtopStr[0] << bot) | (KtopStr[1] >> (64-bot));
@@ -298,7 +298,7 @@
         return swap_if_le(rval);
 	}
 
-	#if __GNUC__ && __arm__
+	#if __GNUC__ && !__clang__ && __arm__
 	static inline block double_block(block b) {
 		__asm__ ("adds %1,%1,%1\n\t"
 				 "adcs %H1,%H1,%H1\n\t"
@@ -1271,7 +1271,7 @@ static void vectors(ae_ctx *ctx, int len)
     printf("P=%d,A=%d: ",len,0); pbuf(ct, i, NULL);
 }
 
-void validate()
+static void validate()
 {
     ALIGN(16) uint8_t pt[1024];
     ALIGN(16) uint8_t ct[1024];

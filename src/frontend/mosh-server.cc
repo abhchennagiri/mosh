@@ -31,6 +31,7 @@
 */
 
 #include "config.h"
+#include "version.h"
 
 #include <errno.h>
 #include <locale.h>
@@ -91,29 +92,29 @@
 
 typedef Network::Transport< Terminal::Complete, Network::UserStream > ServerConnection;
 
-void serve( int host_fd,
-	    Terminal::Complete &terminal,
-	    ServerConnection &network );
+static void serve( int host_fd,
+		   Terminal::Complete &terminal,
+		   ServerConnection &network );
 
-int run_server( const char *desired_ip, const char *desired_port,
-		const string &command_path, char *command_argv[],
-		const int colors, bool verbose, bool with_motd, bool detach );
+static int run_server( const char *desired_ip, const char *desired_port,
+		       const string &command_path, char *command_argv[],
+		       const int colors, bool verbose, bool with_motd, bool detach );
 
 using namespace std;
 
-void print_usage( const char *argv0 )
+static void print_usage( const char *argv0 )
 {
   fprintf( stderr, "Usage: %s new [-s] [-v] [-i LOCALADDR] [-p PORT[:PORT2]] [-c COLORS] [-l NAME=VALUE] [-a] "
            "[-f <logfile>] [-d <debug-level>] [-- COMMAND...]\n", argv0 );
 }
 
-void print_motd( void );
-void chdir_homedir( void );
-bool motd_hushed( void );
-void warn_unattached( const string & ignore_entry );
+static void print_motd( void );
+static void chdir_homedir( void );
+static bool motd_hushed( void );
+static void warn_unattached( const string & ignore_entry );
 
 /* Simple spinloop */
-void spin( void )
+static void spin( void )
 {
   static unsigned int spincount = 0;
   spincount++;
@@ -127,7 +128,7 @@ void spin( void )
   }
 }
 
-string get_SSH_IP( void )
+static string get_SSH_IP( void )
 {
   const char *SSH_CONNECTION = getenv( "SSH_CONNECTION" );
   if ( !SSH_CONNECTION ) { /* Older sshds don't set this */
@@ -205,7 +206,13 @@ int main( int argc, char *argv[] )
 	fatal_assert( desired_ip );
 	break;
       case 'c':
-	colors = myatoi( optarg );
+	try {
+	  colors = myatoi( optarg );
+	} catch ( const CryptoException & ) {
+	  fprintf( stderr, "%s: Bad number of colors (%s)\n", argv[ 0 ], optarg );
+	  print_usage( argv[ 0 ] );
+	  exit( 1 );
+	}
 	break;
       case 'v':
 	verbose = true;
@@ -258,13 +265,17 @@ int main( int argc, char *argv[] )
   string shell_name;
   if ( !command_argv ) {
     /* get shell name */
-    struct passwd *pw = getpwuid( geteuid() );
-    if ( pw == NULL ) {
-      perror( "getpwuid" );
-      exit( 1 );
+    const char *shell = getenv( "SHELL" );
+    if ( shell == NULL ) {
+      struct passwd *pw = getpwuid( geteuid() );
+      if ( pw == NULL ) {
+	perror( "getpwuid" );
+	exit( 1 );
+      }
+      shell = pw->pw_shell;
     }
 
-    string shell_path( pw->pw_shell );
+    string shell_path( shell );
     if ( shell_path.empty() ) { /* empty shell means Bourne shell */
       shell_path = _PATH_BSHELL;
     }
@@ -327,20 +338,20 @@ int main( int argc, char *argv[] )
 
   try {
     return run_server( desired_ip, desired_port, command_path, command_argv, colors, verbose, with_motd, detach );
-  } catch ( const Network::NetworkException& e ) {
-    fprintf( stderr, "Network exception: %s: %s\n",
-	     e.function.c_str(), strerror( e.the_errno ) );
+  } catch ( const Network::NetworkException &e ) {
+    fprintf( stderr, "Network exception: %s\n",
+	     e.what() );
     return 1;
-  } catch ( const Crypto::CryptoException& e ) {
+  } catch ( const Crypto::CryptoException &e ) {
     fprintf( stderr, "Crypto exception: %s\n",
-	     e.text.c_str() );
+	     e.what() );
     return 1;
   }
 }
 
-int run_server( const char *desired_ip, const char *desired_port,
-		const string &command_path, char *command_argv[],
-		const int colors, bool verbose, bool with_motd, bool detach ) {
+static int run_server( const char *desired_ip, const char *desired_port,
+		       const string &command_path, char *command_argv[],
+		       const int colors, bool verbose, bool with_motd, bool detach ) {
   /* get initial window size */
   struct winsize window_size;
   if ( ioctl( STDIN_FILENO, TIOCGWINSZ, &window_size ) < 0 ||
@@ -388,7 +399,7 @@ int run_server( const char *desired_ip, const char *desired_port,
     }
   }
 
-  fprintf( stderr, "\nmosh-server (%s)\n", PACKAGE_STRING );
+  fprintf( stderr, "\nmosh-server (%s) [build %s]\n", PACKAGE_STRING, BUILD_VERSION );
   fprintf( stderr, "Copyright 2012 Keith Winstein <mosh-devel@mit.edu>\n" );
   fprintf( stderr, "License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.\nThis is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.\n\n" );
 
@@ -509,12 +520,12 @@ int run_server( const char *desired_ip, const char *desired_port,
 
     try {
       serve( master, terminal, *network );
-    } catch ( const Network::NetworkException& e ) {
-      fprintf( stderr, "Network exception: %s: %s\n",
-	       e.function.c_str(), strerror( e.the_errno ) );
-    } catch ( const Crypto::CryptoException& e ) {
+    } catch ( const Network::NetworkException &e ) {
+      fprintf( stderr, "Network exception: %s\n",
+	       e.what() );
+    } catch ( const Crypto::CryptoException &e ) {
       fprintf( stderr, "Crypto exception: %s\n",
-	       e.text.c_str() );
+	       e.what() );
     }
 
     #ifdef HAVE_UTEMPTER
@@ -534,7 +545,7 @@ int run_server( const char *desired_ip, const char *desired_port,
   return 0;
 }
 
-void serve( int host_fd, Terminal::Complete &terminal, ServerConnection &network )
+static void serve( int host_fd, Terminal::Complete &terminal, ServerConnection &network )
 {
   /* prepare to poll for events */
   Select &sel = Select::get_instance();
@@ -600,8 +611,9 @@ void serve( int host_fd, Terminal::Complete &terminal, ServerConnection &network
 	    us.apply_string( network.get_remote_diff() );
 	    /* apply userstream to terminal */
 	    for ( size_t i = 0; i < us.size(); i++ ) {
-	      terminal_to_host += terminal.act( us.get_action( i ) );
-	      if ( typeid( *us.get_action( i ) ) == typeid( Parser::Resize ) ) {
+	      const Parser::Action *action = us.get_action( i );
+	      terminal_to_host += terminal.act( action );
+	      if ( typeid( *action ) == typeid( Parser::Resize ) ) {
 		/* tell child process of resize */
 		const Parser::Resize *res = static_cast<const Parser::Resize *>( us.get_action( i ) );
 		struct winsize window_size;
@@ -756,21 +768,21 @@ void serve( int host_fd, Terminal::Complete &terminal, ServerConnection &network
       }
 
       network.tick();
-    } catch ( const Network::NetworkException& e ) {
-      fprintf( stderr, "%s: %s\n", e.function.c_str(), strerror( e.the_errno ) );
+    } catch ( const Network::NetworkException &e ) {
+      fprintf( stderr, "%s\n", e.what() );
       spin();
-    } catch ( const Crypto::CryptoException& e ) {
+    } catch ( const Crypto::CryptoException &e ) {
       if ( e.fatal ) {
         throw;
       } else {
-        fprintf( stderr, "Crypto exception: %s\n", e.text.c_str() );
+        fprintf( stderr, "Crypto exception: %s\n", e.what() );
       }
     }
   }
 }
 
 /* OpenSSH prints the motd on startup, so we will too */
-void print_motd( void )
+static void print_motd( void )
 {
   FILE *motd = fopen( "/etc/motd", "r" );
   if ( !motd ) {
@@ -794,51 +806,42 @@ void print_motd( void )
   fclose( motd );
 }
 
-void chdir_homedir( void )
+static void chdir_homedir( void )
 {
-  struct passwd *pw = getpwuid( geteuid() );
-  if ( pw == NULL ) {
-    perror( "getpwuid" );
-    return; /* non-fatal */
+  const char *home = getenv( "HOME" );
+  if ( home == NULL ) {
+    struct passwd *pw = getpwuid( geteuid() );
+    if ( pw == NULL ) {
+      perror( "getpwuid" );
+      return; /* non-fatal */
+    }
+    home = pw->pw_dir;
   }
 
-  if ( chdir( pw->pw_dir ) < 0 ) {
+  if ( chdir( home ) < 0 ) {
     perror( "chdir" );
   }
 
-  if ( setenv( "PWD", pw->pw_dir, 1 ) < 0 ) {
+  if ( setenv( "PWD", home, 1 ) < 0 ) {
     perror( "setenv" );
   }
 }
 
-bool motd_hushed( void )
+static bool motd_hushed( void )
 {
   /* must be in home directory already */
   struct stat buf;
   return (0 == lstat( ".hushlogin", &buf ));
 }
 
-bool device_exists( const char *ut_line )
+static bool device_exists( const char *ut_line )
 {
   string device_name = string( "/dev/" ) + string( ut_line );
   struct stat buf;
   return (0 == lstat( device_name.c_str(), &buf ));
 }
 
-string mosh_read_line( FILE *file )
-{
-  string ret;
-  while ( !feof( file ) ) {
-    char next = getc( file );
-    if ( next == '\n' ) {
-      return ret;
-    }
-    ret.push_back( next );
-  }
-  return ret;
-}
-
-void warn_unattached( const string & ignore_entry )
+static void warn_unattached( const string & ignore_entry )
 {
 #ifdef HAVE_UTMPX_H
   /* get username */

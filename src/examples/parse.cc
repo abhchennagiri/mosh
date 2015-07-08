@@ -50,6 +50,8 @@
 #include <pty.h>
 #elif HAVE_UTIL_H
 #include <util.h>
+#elif HAVE_LIBUTIL_H
+#include <libutil.h>
 #endif
 
 #include "parser.h"
@@ -61,9 +63,9 @@
 
 const size_t buf_size = 1024;
 
-void emulate_terminal( int fd );
-int copy( int src, int dest );
-int vt_parser( int fd, Parser::UTF8Parser *parser );
+static void emulate_terminal( int fd );
+static int copy( int src, int dest );
+static int vt_parser( int fd, Parser::UTF8Parser *parser );
 
 int main( int argc __attribute__((unused)),
 	  char *argv[] __attribute__((unused)),
@@ -133,7 +135,7 @@ int main( int argc __attribute__((unused)),
   return 0;
 }
 
-void emulate_terminal( int fd )
+static void emulate_terminal( int fd )
 {
   Parser::UTF8Parser parser;
 
@@ -164,7 +166,7 @@ void emulate_terminal( int fd )
   }
 }
 
-int copy( int src, int dest )
+static int copy( int src, int dest )
 {
   char buf[ buf_size ];
 
@@ -179,7 +181,7 @@ int copy( int src, int dest )
   return swrite( dest, buf, bytes_read );
 }
 
-int vt_parser( int fd, Parser::UTF8Parser *parser )
+static int vt_parser( int fd, Parser::UTF8Parser *parser )
 {
   char buf[ buf_size ];
 
@@ -204,7 +206,7 @@ int vt_parser( int fd, Parser::UTF8Parser *parser )
 
       if ( act->char_present ) {
 	if ( iswprint( act->ch ) ) {
-	  printf( "%s(0x%02x=%lc) ", act->name().c_str(), (unsigned int)act->ch, act->ch );
+	  printf( "%s(0x%02x=%lc) ", act->name().c_str(), (unsigned int)act->ch, (wint_t)act->ch );
 	} else {
 	  printf( "%s(0x%02x) ", act->name().c_str(), (unsigned int)act->ch );
 	}

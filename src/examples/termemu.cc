@@ -51,11 +51,14 @@
 #include <sys/types.h>
 #include <pwd.h>
 #include <sys/time.h>
+#include <exception>
 
 #if HAVE_PTY_H
 #include <pty.h>
 #elif HAVE_UTIL_H
 #include <util.h>
+#elif HAVE_LIBUTIL_H
+#include <libutil.h>
 #endif
 
 #include "parser.h"
@@ -68,9 +71,9 @@
 
 const size_t buf_size = 16384;
 
-void emulate_terminal( int fd );
+static void emulate_terminal( int fd );
 
-int main( void )
+int main( int argc, char *argv[] )
 {
   int master;
   struct termios saved_termios, raw_termios, child_termios;
@@ -114,19 +117,26 @@ int main( void )
       exit( 1 );
     }
 
-    /* get shell name */
-    struct passwd *pw = getpwuid( geteuid() );
-    if ( pw == NULL ) {
-      perror( "getpwuid" );
-      exit( 1 );
-    }
-
     char *my_argv[ 2 ];
-    my_argv[ 0 ] = strdup( pw->pw_shell );
-    assert( my_argv[ 0 ] );
-    my_argv[ 1 ] = NULL;
 
-    if ( execv( pw->pw_shell, my_argv ) < 0 ) {
+    if ( argc > 1 ) {
+      argv++;
+    } else {
+      /* get shell name */
+      my_argv[ 0 ] = getenv( "SHELL" );
+      if ( my_argv[ 0 ] == NULL || *my_argv[ 0 ] == '\0' ) {
+	struct passwd *pw = getpwuid( geteuid() );
+	if ( pw == NULL ) {
+	  perror( "getpwuid" );
+	  exit( 1 );
+	}
+	my_argv[ 0 ] = strdup( pw->pw_shell );
+      }
+      assert( my_argv[ 0 ] );
+      my_argv[ 1 ] = NULL;
+      argv = my_argv;
+    }
+    if ( execvp( argv[ 0 ], argv ) < 0 ) {
       perror( "execve" );
       exit( 1 );
     }
@@ -142,7 +152,11 @@ int main( void )
       exit( 1 );
     }
 
-    emulate_terminal( master );
+    try {
+      emulate_terminal( master );
+    } catch ( const std::exception &e ) {
+      fprintf( stderr, "\r\nException caught: %s\r\n", e.what() );
+    }
 
     if ( tcsetattr( STDIN_FILENO, TCSANOW, &saved_termios ) < 0 ) {
       perror( "tcsetattr" );
@@ -156,8 +170,8 @@ int main( void )
 }
 
 /* Print a frame if the last frame was more than 1/50 seconds ago */
-bool tick( Terminal::Framebuffer &state, Terminal::Framebuffer &new_frame,
-	   const Terminal::Display &display )
+static bool tick( Terminal::Framebuffer &state, Terminal::Framebuffer &new_frame,
+		  const Terminal::Display &display )
 {
   static bool initialized = false;
   static struct timeval last_time;
@@ -205,7 +219,7 @@ bool tick( Terminal::Framebuffer &state, Terminal::Framebuffer &new_frame,
    assume the previous frame was sent to the real terminal.
 */
 
-void emulate_terminal( int fd )
+static void emulate_terminal( int fd )
 {
   /* get current window size */
   struct winsize window_size;

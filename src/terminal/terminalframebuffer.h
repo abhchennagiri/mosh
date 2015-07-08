@@ -102,7 +102,7 @@ namespace Terminal {
 	       && (wrap == x.wrap) );
     }
 
-    wchar_t debug_contents( void ) const;
+    wint_t debug_contents( void ) const;
 
     bool is_blank( void ) const
     {
@@ -111,7 +111,7 @@ namespace Terminal {
 						|| (contents.front() == 0xA0) ) ) );
     }
 
-    bool contents_match ( const Cell& other ) const
+    bool contents_match ( const Cell &other ) const
     {
       return ( is_blank() && other.is_blank() )
              || ( contents == other.contents );
@@ -190,9 +190,25 @@ namespace Terminal {
     bool cursor_visible;
     bool reverse_video;
     bool bracketed_paste;
-    bool vt100_mouse;
-    bool xterm_mouse;
-    bool xterm_extended_mouse;
+
+    enum MouseReportingMode {
+      MOUSE_REPORTING_NONE = 0,
+      MOUSE_REPORTING_X10 = 9,
+      MOUSE_REPORTING_VT220 = 1000,
+      MOUSE_REPORTING_VT220_HILIGHT = 1001,
+      MOUSE_REPORTING_BTN_EVENT = 1002,
+      MOUSE_REPORTING_ANY_EVENT = 1003
+    } mouse_reporting_mode;
+
+    bool mouse_focus_event;       // 1004
+    bool mouse_alternate_scroll;  // 1007
+
+    enum MouseEncodingMode {
+      MOUSE_ENCODING_DEFAULT = 0,
+      MOUSE_ENCODING_UTF8 = 1005,
+      MOUSE_ENCODING_SGR = 1006,
+      MOUSE_ENCODING_URXVT = 1015
+    } mouse_encoding_mode;
 
     bool application_mode_cursor_keys;
 
@@ -212,15 +228,15 @@ namespace Terminal {
     void clear_tab( int col );
     void clear_default_tabs( void ) { default_tabs = false; }
     /* Default tabs can't be restored without resetting the draw state. */
-    int get_next_tab( void );
+    int get_next_tab( void ) const;
 
     void set_scrolling_region( int top, int bottom );
 
     int get_scrolling_region_top_row( void ) const { return scrolling_region_top_row; }
     int get_scrolling_region_bottom_row( void ) const { return scrolling_region_bottom_row; }
 
-    int limit_top( void );
-    int limit_bottom( void );
+    int limit_top( void ) const;
+    int limit_bottom( void ) const;
 
     void set_foreground_color( int x ) { renditions.set_foreground_color( x ); }
     void set_background_color( int x ) { renditions.set_background_color( x ); }
@@ -242,8 +258,9 @@ namespace Terminal {
       return ( width == x.width ) && ( height == x.height ) && ( cursor_col == x.cursor_col )
 	&& ( cursor_row == x.cursor_row ) && ( cursor_visible == x.cursor_visible ) &&
 	( reverse_video == x.reverse_video ) && ( renditions == x.renditions ) &&
-  ( bracketed_paste == x.bracketed_paste ) && ( vt100_mouse == x.vt100_mouse ) &&
-  ( xterm_mouse == x.xterm_mouse ) && ( xterm_extended_mouse == x.xterm_extended_mouse );
+  ( bracketed_paste == x.bracketed_paste ) && ( mouse_reporting_mode == x.mouse_reporting_mode ) &&
+  ( mouse_focus_event == x.mouse_focus_event ) && ( mouse_alternate_scroll == x.mouse_alternate_scroll) &&
+  ( mouse_encoding_mode == x.mouse_encoding_mode );
     }
   };
 

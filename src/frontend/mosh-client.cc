@@ -31,9 +31,9 @@
 */
 
 #include "config.h"
+#include "version.h"
 
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 
 #include "stmclient.h"
@@ -71,8 +71,8 @@
 #  error "SysV or X/Open-compatible Curses header file required"
 #endif
 
-void usage( const char *argv0 ) {
-  fprintf( stderr, "mosh-client (%s)\n", PACKAGE_STRING );
+static void usage( const char *argv0 ) {
+  fprintf( stderr, "mosh-client (%s) [build %s]\n", PACKAGE_STRING, BUILD_VERSION );
   fprintf( stderr, "Copyright 2012 Keith Winstein <mosh-devel@mit.edu>\n" );
   fprintf( stderr, "License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.\nThis is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.\n\n" );
 
@@ -80,7 +80,7 @@ void usage( const char *argv0 ) {
            "Usage: %s IP PORT\n       %s -c [-f <logfile>] [-d <debug-level>] [-w]\n", argv0, argv0 );
 }
 
-void print_colorcount( void )
+static void print_colorcount( void )
 {
   /* check colors */
   setupterm((char *)0, 1, (int *)0);
@@ -95,7 +95,11 @@ void print_colorcount( void )
   printf( "%d\n", color_val );
 }
 
+#ifdef NACL
+int mosh_main( int argc, char *argv[] )
+#else
 int main( int argc, char *argv[] )
+#endif
 {
   /* For security, make sure we don't dump core */
   Crypto::disable_dumping_core();
@@ -190,14 +194,14 @@ int main( int argc, char *argv[] )
     }
 
     client.shutdown();
-  } catch ( const Network::NetworkException& e ) {
-    fprintf( stderr, "Network exception: %s: %s\r\n",
-	     e.function.c_str(), strerror( e.the_errno ) );
-  } catch ( const Crypto::CryptoException& e ) {
+  } catch ( const Network::NetworkException &e ) {
+    fprintf( stderr, "Network exception: %s\r\n",
+	     e.what() );
+  } catch ( const Crypto::CryptoException &e ) {
     fprintf( stderr, "Crypto exception: %s\r\n",
-	     e.text.c_str() );
-  } catch ( const std::string& s ) {
-    fprintf( stderr, "Error: %s\r\n", s.c_str() );
+	     e.what() );
+  } catch ( const std::exception &e ) {
+    fprintf( stderr, "Error: %s\r\n", e.what() );
   }
 
   printf( "\n[mosh is exiting.]\n" );

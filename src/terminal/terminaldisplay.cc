@@ -51,7 +51,10 @@ std::string Display::open() const
 
 std::string Display::close() const
 {
-  return std::string( "\033[?1l\033[0m\033[?25h" ) + std::string( rmcup ? rmcup : "" );
+  return std::string( "\033[?1l\033[0m\033[?25h"
+		      "\033[?1003l\033[?1002l\033[?1001l\033[?1000l"
+		      "\033[?1015l\033[?1006l\033[?1005l" ) +
+    std::string( rmcup ? rmcup : "" );
 }
 
 std::string Display::new_frame( bool initialized, const Framebuffer &last, const Framebuffer &f ) const
@@ -78,7 +81,7 @@ std::string Display::new_frame( bool initialized, const Framebuffer &last, const
       for ( std::deque<wchar_t>::const_iterator i = window_title.begin();
             i != window_title.end();
             i++ ) {
-	snprintf( tmp, 64, "%lc", *i );
+	snprintf( tmp, 64, "%lc", (wint_t)*i );
 	frame.append( tmp );
       }
       frame.append( "\007" );
@@ -90,7 +93,7 @@ std::string Display::new_frame( bool initialized, const Framebuffer &last, const
       for ( std::deque<wchar_t>::const_iterator i = icon_name.begin();
 	    i != icon_name.end();
 	    i++ ) {
-	snprintf( tmp, 64, "%lc", *i );
+	snprintf( tmp, 64, "%lc", (wint_t)*i );
 	frame.append( tmp );
       }
       frame.append( "\007" );
@@ -100,7 +103,7 @@ std::string Display::new_frame( bool initialized, const Framebuffer &last, const
       for ( std::deque<wchar_t>::const_iterator i = window_title.begin();
 	    i != window_title.end();
 	    i++ ) {
-	snprintf( tmp, 64, "%lc", *i );
+	snprintf( tmp, 64, "%lc", (wint_t)*i );
 	frame.append( tmp );
       }
       frame.append( "\007" );
@@ -143,7 +146,7 @@ std::string Display::new_frame( bool initialized, const Framebuffer &last, const
     int lines_scrolled = 0;
     int scroll_height = 0;
 
-    for ( int row = 0; row < f.ds.get_height(); row++ ) {
+    for ( int row = 0; row < frame.last_frame.ds.get_height(); row++ ) {
       if ( *(f.get_row( 0 )) == *(frame.last_frame.get_row( row )) ) {
 	/* found a scroll */
 	lines_scrolled = row;
@@ -292,22 +295,45 @@ std::string Display::new_frame( bool initialized, const Framebuffer &last, const
     frame.append( f.ds.bracketed_paste ? "\033[?2004h" : "\033[?2004l" );
   }
 
-  /* has xterm VT100 mouse mode changed? */
+  /* has mouse reporting mode changed? */
   if ( (!initialized)
-       || (f.ds.vt100_mouse != frame.last_frame.ds.vt100_mouse) ) {
-    frame.append( f.ds.vt100_mouse ? "\033[?1000h" : "\033[?1000l" );
+       || (f.ds.mouse_reporting_mode != frame.last_frame.ds.mouse_reporting_mode) ) {
+    if (f.ds.mouse_reporting_mode == DrawState::MOUSE_REPORTING_NONE) {
+      frame.append("\033[?1003l");
+      frame.append("\033[?1002l");
+      frame.append("\033[?1001l");
+      frame.append("\033[?1000l");
+    } else {
+      if (frame.last_frame.ds.mouse_reporting_mode != DrawState::MOUSE_REPORTING_NONE) {
+        snprintf(tmp, sizeof(tmp), "\033[?%dl", frame.last_frame.ds.mouse_reporting_mode);
+        frame.append(tmp);
+      }
+      snprintf(tmp, sizeof(tmp), "\033[?%dh", f.ds.mouse_reporting_mode);
+      frame.append(tmp);
+    }
   }
 
-  /* has xterm mouse mode changed? */
+  /* has mouse focus mode changed? */
   if ( (!initialized)
-       || (f.ds.xterm_mouse != frame.last_frame.ds.xterm_mouse) ) {
-    frame.append( f.ds.xterm_mouse ? "\033[?1002h" : "\033[?1002l" );
+       || (f.ds.mouse_focus_event != frame.last_frame.ds.mouse_focus_event) ) {
+    frame.append( f.ds.mouse_focus_event ? "\033[?1004h" : "\033[?1004l" );
   }
 
-  /* has xterm mouse mode changed? */
+  /* has mouse encoding mode changed? */
   if ( (!initialized)
-       || (f.ds.xterm_extended_mouse != frame.last_frame.ds.xterm_extended_mouse) ) {
-    frame.append( f.ds.xterm_extended_mouse ? "\033[?1006h\033[?1002h" : "\033[?1006l\033[?1002l" );
+       || (f.ds.mouse_encoding_mode != frame.last_frame.ds.mouse_encoding_mode) ) {
+    if (f.ds.mouse_encoding_mode == DrawState::MOUSE_ENCODING_DEFAULT) {
+      frame.append("\033[?1015l");
+      frame.append("\033[?1006l");
+      frame.append("\033[?1005l");
+    } else {
+      if (frame.last_frame.ds.mouse_encoding_mode != DrawState::MOUSE_ENCODING_DEFAULT) {
+        snprintf(tmp, sizeof(tmp), "\033[?%dl", frame.last_frame.ds.mouse_encoding_mode);
+        frame.append(tmp);
+      }
+      snprintf(tmp, sizeof(tmp), "\033[?%dh", f.ds.mouse_encoding_mode);
+      frame.append(tmp);
+    }
   }
 
   return frame.str;
@@ -395,7 +421,7 @@ void Display::put_cell( bool initialized, FrameState &frame, const Framebuffer &
   for ( std::vector<wchar_t>::const_iterator i = cell->contents.begin();
 	i != cell->contents.end();
 	i++ ) {
-    snprintf( tmp, 64, "%lc", *i );
+    snprintf( tmp, 64, "%lc", (wint_t)*i );
     frame.append( tmp );
   }
 

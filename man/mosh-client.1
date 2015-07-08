@@ -27,7 +27,7 @@ IP PORT
 .br
 .SH DESCRIPTION
 \fBmosh-client\fP is a helper program for the 
-.BR mosh(1)
+.BR mosh (1)
 remote terminal application.
 
 \fBmosh\fP itself is a setup script that establishes an SSH
@@ -56,6 +56,29 @@ attach a gdb session.
 The \-f option specify the log file, and the \-d option the debug
 level.  There is two debug level: \fBerror\fP and \fBdebug\fP.  By
 default, there is no log output.
+
+.SH ENVIRONMENT VARIABLES
+
+.TP
+.B MOSH_KEY
+This variable must be set, and must contain a Base64-encoded cryptographic key from
+.BR mosh-server (1).
+
+.TP
+.B MOSH_ESCAPE_KEY
+See
+.BR mosh (1).
+
+.TP
+.B MOSH_PREDICTION_DISPLAY
+Controls local echo as described in
+.BR mosh (1).
+
+.TP
+.B MOSH_TITLE_NOPREFIX
+See
+.BR mosh (1).
+
 
 .SH SEE ALSO
 .BR mosh (1),

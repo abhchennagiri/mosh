@@ -166,6 +166,7 @@ void ConditionalCursorMove::apply( Framebuffer &fb, uint64_t confirmed_epoch ) c
 NotificationEngine::NotificationEngine()
   : last_word_from_server( timestamp() ),
     last_acked_state( timestamp() ),
+    escape_key_string(),
     message(),
     message_is_network_exception( false ),
     message_expiration( -1 ),
@@ -233,10 +234,9 @@ void NotificationEngine::apply( Framebuffer &fb ) const
     explanation = reply_message;
   }
 
-  const static char quit_keystroke[] = " [To quit: Ctrl-^ .]";
   const static char blank[] = "";
 
-  const char *keystroke_str = show_quit_keystroke ? quit_keystroke : blank;
+  const char *keystroke_str = show_quit_keystroke ? escape_key_string.c_str() : blank;
 
   if ( message.empty() && (!time_expired) ) {
     return;

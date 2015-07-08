@@ -172,12 +172,12 @@ void STMClient::init( void )
   if ( escape_key > 0 ) {
     char escape_pass_name_buf[16];
     char escape_key_name_buf[16];
-    sprintf(escape_pass_name_buf, "\"%c\"", escape_pass_key);
+    snprintf(escape_pass_name_buf, sizeof escape_pass_name_buf, "\"%c\"", escape_pass_key);
     if (escape_key < 32) {
-      sprintf(escape_key_name_buf, "Ctrl-%c", escape_pass_key);
+      snprintf(escape_key_name_buf, sizeof escape_key_name_buf, "Ctrl-%c", escape_pass_key);
       escape_requires_lf = false;
     } else {
-      sprintf(escape_key_name_buf, "\"%c\"", escape_key);
+      snprintf(escape_key_name_buf, sizeof escape_key_name_buf, "\"%c\"", escape_key);
       escape_requires_lf = true;
     }
     string tmp;
@@ -186,6 +186,7 @@ void STMClient::init( void )
     tmp = string( escape_key_name_buf );
     wstring escape_key_name = std::wstring(tmp.begin(), tmp.end());
     escape_key_help = L"Commands: Ctrl-Z suspends, \".\" quits, " + escape_pass_name + L" gives literal " + escape_key_name;
+    overlays.get_notification_engine().set_escape_key_string( tmp );
   }
   wchar_t tmp[ 128 ];
   swprintf( tmp, 128, L"Nothing received from server on UDP port %s.", port.c_str() );
@@ -284,7 +285,7 @@ void STMClient::output_new_frame( void )
   local_framebuffer = tmp;
 }
 
-bool STMClient::process_network_input( void )
+void STMClient::process_network_input( void )
 {
   network->recv();
   
@@ -295,8 +296,6 @@ bool STMClient::process_network_input( void )
   overlays.get_prediction_engine().set_local_frame_acked( network->get_sent_state_acked() );
   overlays.get_prediction_engine().set_send_interval( network->send_interval() );
   overlays.get_prediction_engine().set_local_frame_late_acked( network->get_latest_remote_state().state.get_echo_ack() );
-
-  return true;
 }
 
 bool STMClient::process_user_input( int fd )
@@ -463,7 +462,7 @@ void STMClient::main( void )
       }
 
       if ( network_ready_to_read ) {
-	if ( !process_network_input() ) { return; }
+	process_network_input();
       }
     
       if ( sel.read( STDIN_FILENO ) ) {
@@ -568,7 +567,7 @@ void STMClient::main( void )
         throw;
       } else {
         wchar_t tmp[ 128 ];
-        swprintf( tmp, 128, L"Crypto exception: %s", e.text.c_str() );
+        swprintf( tmp, 128, L"Crypto exception: %s", e.what() );
         overlays.get_notification_engine().set_notification_string( wstring( tmp ) );
       }
     }
