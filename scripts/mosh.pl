@@ -34,7 +34,6 @@ use warnings;
 use strict;
 use Getopt::Long;
 use IO::Socket;
-use IO::Socket::INET6;
 
 $|=1;
 
