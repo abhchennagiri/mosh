@@ -34,6 +34,7 @@
 #define ADDRESSES_HPP
 
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <netinet/in.h>
 #include <string.h>
 #include <set>
