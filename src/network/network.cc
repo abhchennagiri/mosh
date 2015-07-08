@@ -143,11 +143,11 @@ Packet Connection::new_packet( Flow *flow, uint16_t flags, string &s_payload )
       flow->idle_time = ( MAX_IDLE_TIME - flow->idle_time < rto ) ? MAX_IDLE_TIME : flow->idle_time + rto;
       log_dbg( LOG_DEBUG_COMMON, "Flow %hu seems idle for %dms (SRTT = %dms).\n",
 	       flow->flow_id, (int)flow->idle_time, (int)flow->SRTT );
-      flow->rto = UINT64_MAX;
+      flow->rto = uint64_t(-1);
     }
 
     flow->next_probe = now + probe_interval;
-    if ( flow->rto == UINT64_MAX ) {
+    if ( flow->rto == uint64_t(-1) ) {
       flow->rto = now + rto + delay_ack_interval;
     }
   }
@@ -1045,7 +1045,7 @@ string Connection::recv_one( int sock_to_recv )
     /* auto-adjust to remote host */
     flow_info->last_heard = last_heard = timestamp();
     flow_info->idle_time = 0;
-    flow_info->rto = UINT64_MAX;
+    flow_info->rto = uint64_t(-1);
 
     if ( server ) { /* only client can roam */
       bool has_roam = last_flow != flow_info &&
