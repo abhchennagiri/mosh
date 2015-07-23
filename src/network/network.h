@@ -262,13 +262,13 @@ namespace Network {
 
     std::string port( void ) const;
     string get_key( void ) const { return key.printable_key(); }
-    bool get_has_remote_addr( void ) const { return last_flow != NULL; }
+    bool get_has_remote_addr( void ) const { return ( server && last_flow != NULL ) || flows.size() > 0; }
 
     uint64_t timeout( void ) const;
-    double get_SRTT( void ) const { return last_flow ? last_flow->SRTT : 1000; }
+    double get_SRTT( void ) const { return flows.size() > 0 ? flows.front()->SRTT : 1000; }
 
-    const Addr &get_remote_addr( void ) const { return last_flow ? last_flow->dst : remote_addr.back(); }
-    socklen_t get_remote_addr_len( void ) const { return last_flow ? last_flow->dst.addrlen : 0; }
+    const Addr &get_remote_addr( void ) const { return flows.size() > 0 ? flows.front()->dst : remote_addr.back(); }
+    socklen_t get_remote_addr_len( void ) const { return flows.size() > 0 ? flows.front()->dst.addrlen : remote_addr.back().addrlen; }
 
     const NetworkException *get_send_exception( void ) const
     {

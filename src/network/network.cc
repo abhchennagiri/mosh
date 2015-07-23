@@ -806,78 +806,34 @@ void Connection::send( uint8_t flags, string s )
   }
 
   have_send_exception = true;
-
-  log_dbg( LOG_DEBUG_COMMON, "timestamp %llu\n", (long long unsigned)timestamp() );
-
+  uint64_t now = timestamp();
   ssize_t bytes_sent = -1;
-  if ( server ) {
-    Packet px = new_packet( last_flow, flags, s );
+  int possible_idle_send = -1; /* -1: undefined, 0: false, 1: true. */
+  int loss_ratio = 100;
+  int step = 1; /* debug only */
 
-    string p = px.tostring( &session );
+  log_dbg( LOG_DEBUG_COMMON, "timestamp %llu\n", (long long unsigned)now );
 
-    log_dbg( LOG_DEBUG_COMMON, "sending data len %d try 1 flow %hu seq %llu local %s remote %s "
-	     "srtt %dms idle %dms iloss %d%% oloss %d%% loss-ratio -1",
-	     (int)p.size(),
-	     last_flow->flow_id, (long long unsigned) last_flow->next_seq - 1, last_flow->src.tostring().c_str(),
-	     last_flow->dst.tostring().c_str(), (int)last_flow->SRTT, (int)last_flow->idle_time,
-	     (int)last_flow->incoming_loss.get_ratio(), (int)last_flow->outgoing_loss );
+  /* We try to achieve:
+       - sending on the fasted path (RTT based only),
+       - sending on a non-idle flow (if it exists),
+       - having less than [loss_ratio_tolerance] loss ratio. */
 
-    bytes_sent = sendfromto( last_flow->dst.sa.sa_family == AF_INET ? sock() : sock6(),
-			     p.data(), p.size(), MSG_DONTWAIT, last_flow->src, last_flow->dst );
-    if ( bytes_sent == static_cast<ssize_t>( p.size() ) ) {
-      log_dbg( LOG_DEBUG_COMMON, " success\n" );
-      have_send_exception = false;
-    } else {
-      if ( errno == EADDRNOTAVAIL ) {
-	/* This should not append, since we just receive a message on this address ! */
-      }
-      log_dbg( LOG_DEBUG_COMMON | LOG_PRINT_ERROR, " failed" );
-    }
+  sort_flows();
+  for ( std::vector< Flow* >::const_iterator it = flows.begin();
+	it != flows.end();
+	it ++ ) {
+    Flow *flow = *it;
 
-  } else if ( UNLIKELY( last_flow == NULL ) ) { /* First send. */
-    for ( std::vector< Flow* >::iterator it = flows.begin();
-	  it != flows.end();
-	  it++ ) {
-      Flow *flow = *it;
-      Packet px = new_packet( flow, flags, s );
-      string p = px.tostring( &session );
-      log_dbg( LOG_DEBUG_COMMON, "sending data len %d try 1 flow %hu seq %llu local %s remote %s "
-	       "srtt %dms idle %dms iloss %d%% oloss %d%%",
-	       (int)p.size(),
-	       flow->flow_id, (long long unsigned) flow->next_seq - 1, flow->src.tostring().c_str(),
-	       flow->dst.tostring().c_str(), (int)flow->SRTT, (int)flow->idle_time,
-	       (int)flow->incoming_loss.get_ratio(), (int)flow->outgoing_loss );
-      bytes_sent = sendfromto( flow->dst.sa.sa_family == AF_INET ? sock() : sock6(),
-			       p.data(), p.size(), MSG_DONTWAIT, flow->src, flow->dst );
-      if ( bytes_sent < 0 ) {
-	if ( errno == EMSGSIZE ) {
-	  flow->MTU = 500; /* payload MTU of last resort */
-	} else {
-	  flow->idle_time = MAX_IDLE_TIME;
-	}
- 	log_dbg( LOG_DEBUG_COMMON | LOG_PRINT_ERROR, " failed" );
-      } else if ( bytes_sent == static_cast<ssize_t>( p.size() ) ) {
-	have_send_exception = false;
-	log_dbg( LOG_DEBUG_COMMON, " success\n" );
-	last_flow = flow;
-      } else {
-	log_dbg( LOG_DEBUG_COMMON, " failed (partial)\n" );
-      }
-    }
+    /*
+      Send data if we did't send anything, or if the expected loss ratio is not
+      reach and the flow seems not to be completely idle, or if we only did
+      (possibly) idle sent, and that flow is not idle.  Send a probe otherwise.
+    */
 
-  } else {
-    sort_flows();
-    bool possible_idle_send = false;
-    int loss_ratio = 100;
-    int step = 1;
-    for ( std::vector< Flow* >::const_iterator it = flows.begin();
-	  it != flows.end();
-	  it ++ ) {
-      Flow *flow = *it;
-      if ( possible_idle_send && flow->idle_time ) {
-	/* search a reactive flow, even if slow */
-	continue;
-      }
+    if ( possible_idle_send == -1 ||
+	 ( loss_ratio > loss_ratio_tolerance && flow->idle_time < MAX_IDLE_TIME ) ||
+	 ( possible_idle_send == 1 && ! flow->idle_time ) ) {
       Packet px = new_packet( flow, flags, s );
       string p = px.tostring( &session );
       log_dbg( LOG_DEBUG_COMMON, "sending data len %d try %d flow %hu seq %llu local %s remote %s "
@@ -887,37 +843,30 @@ void Connection::send( uint8_t flags, string s )
 	       (int)flow->incoming_loss.get_ratio(), (int)flow->outgoing_loss );
       bytes_sent = sendfromto( flow->dst.sa.sa_family == AF_INET ? sock() : sock6(),
 			       p.data(), p.size(), MSG_DONTWAIT, flow->src, flow->dst );
-      if ( bytes_sent < 0 ) {
+      if ( bytes_sent == static_cast<ssize_t>( p.size() ) ) {
+	have_send_exception = false;
+	loss_ratio = ( loss_ratio * flow->outgoing_loss ) / 100;
+	if ( flow->idle_time && possible_idle_send < 0 ) {
+	  possible_idle_send = 1;
+	} else {
+	  possible_idle_send = 0;
+	}
+	log_dbg( LOG_DEBUG_COMMON, " loss-ratio %d success\n", loss_ratio );
+      } else if ( bytes_sent < 0 ) {
 	if ( errno == EMSGSIZE ) {
 	  flow->MTU = 500; /* payload MTU of last resort */
 	} else {
 	  flow->idle_time = MAX_IDLE_TIME;
 	}
- 	log_dbg( LOG_DEBUG_COMMON | LOG_PRINT_ERROR, " failed" );
-      } else if ( bytes_sent == static_cast<ssize_t>( p.size() ) ){
-	have_send_exception = false;
-	if ( last_flow != flow && step == 1 ) {
-	  log_dbg( LOG_DEBUG_COMMON, " switching" );
-	  last_flow = flow;
-	} else {
-	  log_dbg( LOG_DEBUG_COMMON, " success" );
-	}
-
-	loss_ratio = ( loss_ratio * flow->outgoing_loss ) / 100;
-	log_dbg( LOG_DEBUG_COMMON, " loss-ratio %d\n", loss_ratio );
-
-	if ( flow->idle_time ) {
-	  possible_idle_send = true;
-	} else if ( loss_ratio <= loss_ratio_tolerance ) {
-	  break;
-	}
+	log_dbg( LOG_DEBUG_COMMON | LOG_PRINT_ERROR, " loss-ratio %d failed", loss_ratio );
       } else {
-	log_dbg( LOG_DEBUG_COMMON, " failed (partial)\n" );
+	log_dbg( LOG_DEBUG_COMMON, " loss-ratio %d failed (partial)\n", loss_ratio );
       }
       step++;
-    }
 
-    send_probes();
+    } else if ( !server && ( flow->next_probe <= now || flow->rto <= now ) ) {
+      send_probe(flow);
+    }
   }
 
   if ( have_send_exception ) {
@@ -930,7 +879,6 @@ void Connection::send( uint8_t flags, string s )
     send_exception = NetworkException( "sendmsg", errno );
   }
 
-  uint64_t now = timestamp();
   if ( server ) {
     if ( now - last_heard > SERVER_ASSOCIATION_TIMEOUT ) {
       last_flow = NULL;
