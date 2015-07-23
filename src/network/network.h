@@ -240,7 +240,7 @@ namespace Network {
 
     void send( uint8_t flags, string s );
     void send_probes( void );
-    bool send_probe( Flow *flow );
+    void send_probe( Flow *flow );
     void send_addresses( void );
     ssize_t sendfromto( int sock, const char *buffer, size_t size, int flags, Addr from, Addr to );
     string recv_one( int sock_to_recv );

@@ -665,14 +665,15 @@ void Connection::send_probes( void )
   }
 }
 
-bool Connection::send_probe( Flow *flow )
+void Connection::send_probe( Flow *flow )
 {
   string empty("");
   Packet px = new_packet( flow, PROBE_FLAG, empty );
 
   string p = px.tostring( &session );
 
-  log_dbg( LOG_DEBUG_COMMON, "sending probe len %d flow %hu seq %llu local %s remote %s srtt %dms idle %dms iloss %d%% oloss %d%%",
+  log_dbg( LOG_DEBUG_COMMON, "sending probe len %d flow %hu seq %llu local %s remote %s srtt %dms idle %dms "
+	   "iloss %d%% oloss %d%% loss-ratio -1",
 	   (int)p.size(),
 	   flow->flow_id, (long long unsigned)flow->next_seq - 1,
 	   flow->src.tostring().c_str(), flow->dst.tostring().c_str(), (int)flow->SRTT, (int)flow->idle_time,
@@ -686,8 +687,6 @@ bool Connection::send_probe( Flow *flow )
   } else {
     log_dbg( LOG_DEBUG_COMMON, " success\n" );
   }
-
-  return ( bytes_sent != static_cast<ssize_t>( p.size() ) );
 }
 
 void Connection::send_addresses( void )
