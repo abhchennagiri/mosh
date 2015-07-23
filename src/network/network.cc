@@ -648,21 +648,6 @@ Connection::Connection( uint16_t delay_ack, const char *key_str, const char *ip,
   /* Ask the server what are its addresses. */
   check_remote_addr();
   last_addr_request = timestamp();
-  send_probes(); /* This should check all flows. */
-}
-
-void Connection::send_probes( void )
-{
-  assert( !server );
-  uint64_t now = timestamp();
-  for ( std::vector< Flow* >::iterator it = flows.begin();
-	it != flows.end();
-	it++ ) {
-    Flow *flow = *it;
-    if ( flow != last_flow && ( flow->next_probe <= now || flow->rto <= now ) ) {
-      send_probe( flow );
-    }
-  }
 }
 
 void Connection::send_probe( Flow *flow )
