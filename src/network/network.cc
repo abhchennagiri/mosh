@@ -348,7 +348,7 @@ Connection::Flow::Flow( const Addr &s_src, const Addr &s_dst )
     SRTT( defaults.SRTT ),
     RTTVAR( defaults.RTTVAR ),
     incoming_loss(),
-    outgoing_loss( 0 ),
+    outgoing_loss( 100 ),
     flow_id( next_flow_id++ )
 {
   if ( flow_id == 0xFFFF ) {
@@ -372,7 +372,7 @@ Connection::Flow::Flow( const Addr &s_src, const Addr &s_dst, uint16_t id )
     SRTT( defaults.SRTT ),
     RTTVAR( defaults.RTTVAR ),
     incoming_loss(),
-    outgoing_loss( 0 ),
+    outgoing_loss( 100 ),
     flow_id( id )
 {
   assert( !next_flow_id ); /* The server should not have initialized any flow. */
