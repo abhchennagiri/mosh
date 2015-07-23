@@ -296,6 +296,16 @@ void Connection::sort_flows( void ) {
   std::sort( flows.begin(), flows.end(), Flow::srtt_order );
 }
 
+void Connection::update_server_idle_time( void ) {
+  assert( server );
+  for ( std::vector< Flow* >::const_iterator it = flows.begin();
+	it != flows.end();
+	it ++ ) {
+    Flow *flow = *it;
+    flow->idle_time = last_heard - flow->last_heard;
+  }
+}
+
 void Connection::Loss::update(uint64_t seq)
 {
   uint64_t now = timestamp();
@@ -803,6 +813,10 @@ void Connection::send( uint8_t flags, string s )
        - sending on the fasted path (RTT based only),
        - sending on a non-idle flow (if it exists),
        - having less than [loss_ratio_tolerance] loss ratio. */
+
+  if ( server ) {
+    update_server_idle_time();
+  }
 
   sort_flows();
   for ( std::vector< Flow* >::const_iterator it = flows.begin();

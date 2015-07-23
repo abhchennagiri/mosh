@@ -231,6 +231,7 @@ namespace Network {
     void check_flows( bool remote_has_changed );
     Flow *get_flow( uint16_t id );
     void sort_flows( void );
+    void update_server_idle_time( void );
 
     int sock( void ) const { assert( !socks.empty() ); return socks.back().fd(); }
     int sock6( void ) const { assert( !socks6.empty() ); return socks6.back().fd(); }
