@@ -141,7 +141,7 @@ Packet Connection::new_packet( Flow *flow, uint8_t flags, string &s_payload )
     flow->saved_timestamp_received_at = 0;
   }
 
-  if ( !server ) {
+  if ( !server ) { /* only the client waits answer. */
     unsigned int rto = ( (unsigned int)flow->SRTT + flow->idle_time ) + 4 * flow->RTTVAR;
     unsigned int probe_interval = MAX( rto + delay_ack_interval, MIN_PROBE_INTERVAL );
     if ( flow->rto < now ) {
