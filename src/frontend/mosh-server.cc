@@ -105,7 +105,8 @@ using namespace std;
 static void print_usage( const char *argv0 )
 {
   fprintf( stderr, "Usage: %s new [-s] [-v] [-i LOCALADDR] [-p PORT[:PORT2]] [-c COLORS] [-l NAME=VALUE] [-a] "
-           "[-f <logfile>] [-d <debug-level>] [-m <loss-tolerance>] [-- COMMAND...]\n", argv0 );
+           "[-f <logfile>] [-d <debug-level>] [-m <loss-tolerance>] [-- COMMAND...]\n"
+	   "       %s new -e\n", argv0, argv0 );
 }
 
 static void print_motd( void );
@@ -190,7 +191,7 @@ int main( int argc, char *argv[] )
        && (strcmp( argv[ 1 ], "new" ) == 0) ) {
     /* new option syntax */
     int opt;
-    while ( (opt = getopt( argc - 1, argv + 1, "ai:p:c:svl:d:f:m:" )) != -1 ) {
+    while ( (opt = getopt( argc - 1, argv + 1, "aei:p:c:svl:d:f:m:" )) != -1 ) {
       switch ( opt ) {
       case 'a':
 	detach = false;
@@ -235,6 +236,14 @@ int main( int argc, char *argv[] )
         break;
       case 'm':
 	loss_ratio_tolerance = atoi( optarg );
+	break;
+      case 'e':
+	printf( "mosh-server (%s) [build %s]\n", PACKAGE_STRING, BUILD_VERSION );
+	/* list of supported extensions and options: */
+	printf( "  standard eipcsvl\n"
+		"  debug adf\n"
+		"  multipath m\n" );
+	exit(0);
 	break;
       default:
 	print_usage( argv[ 0 ] );

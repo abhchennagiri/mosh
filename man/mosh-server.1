@@ -30,6 +30,10 @@ new
 [\-m \fILOSS-TOLERANCE\fP]
 [\-\- command...]
 .br
+.B mosh-server
+new
+\-e
+.br
 .SH DESCRIPTION
 \fBmosh-server\fP is a helper program for the 
 .BR mosh(1)
@@ -104,6 +108,13 @@ This option control the packet duplication algorithm: packets sent will be
 duplicate on each different path until the product of the loss ratio of the used
 paths is less than the tolerance (or no more different paths are available).
 The default is 0.
+
+.TP
+.B \-e
+Print the supported extensions, and exit.  The format is standard and can be
+parsed.  It begins by one header line with the package name and the build
+version, followed by multiple lines having each the name and the supported
+options of an extension.
 
 .SH EXAMPLE
 
