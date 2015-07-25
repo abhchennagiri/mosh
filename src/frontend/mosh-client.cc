@@ -77,7 +77,8 @@ static void usage( const char *argv0 ) {
   fprintf( stderr, "License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.\nThis is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.\n\n" );
 
   fprintf( stderr,
-           "Usage: %s IP PORT\n       %s -c [-f <logfile>] [-d <debug-level>] [-w]\n", argv0, argv0 );
+	   "Usage: %s [-f <logfile>] [-d <debug-level>] [-w] IP PORT\n"
+	   "       %s -c\n", argv0, argv0 );
 }
 
 static void print_colorcount( void )
