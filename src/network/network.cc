@@ -241,9 +241,6 @@ void Connection::check_flows( bool remote_has_changed ) {
   assert( !server );
   int has_changed = 0;
   std::vector< Addr > addresses = host_addresses.get_host_addresses( &has_changed );
-  /* this will allow the system to choose the source address on one flow. */
-  addresses.push_back( Addr( AF_INET ) );
-  addresses.push_back( Addr( AF_INET6 ) );
 
   if ( !has_changed && !remote_has_changed ) {
     return;
@@ -630,11 +627,6 @@ Connection::Connection( uint16_t delay_ack, const char *key_str, const char *ip,
     send_exception()
 {
   setup();
-
-  std::vector< Addr > addresses = host_addresses.get_host_addresses( NULL );
-  /* this will allow the system to choose the source address on one flow. */
-  addresses.push_back( Addr( AF_INET ) );
-  addresses.push_back( Addr( AF_INET6 ) );
 
   struct addrinfo hints;
   memset( &hints, 0, sizeof( hints ) );
